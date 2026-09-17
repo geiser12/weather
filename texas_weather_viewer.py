@@ -648,7 +648,7 @@ def render_image(field, lats, lons, texas_paths, var, model_label, date, hour,
         ax.plot(clon, clat, "o", color="white", markersize=3.5,
                 markeredgecolor="#111", markeredgewidth=0.6, zorder=6)
         ax.text(tlon, tlat + 0.22, name, fontsize=6.5, ha="center", va="bottom",
-                color="#111", fontweight="medium", zorder=7)
+                color="#111", fontweight="normal", zorder=7)
         ax.text(tlon, tlat - 0.18, _fmt(val), fontsize=7, ha="center", va="top",
                 color="#111", fontweight="bold", zorder=7)
 
@@ -1044,7 +1044,7 @@ document.getElementById("refreshBtn").onclick = () => location.reload();
 document.getElementById("subtitle").textContent =
   `${DATA.npoints} source points • ${DATA.models.length} models • high-res images`;
 document.getElementById("lastUpdated").textContent =
-  `Last updated: ${DATA.generated_at} CT`;
+  `Last updated: ${DATA.generated_at} UTC`;
 
 dateSelect.value = currentDate;
 varSelect.value  = currentVar;
