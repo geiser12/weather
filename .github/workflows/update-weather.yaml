@@ -10,9 +10,10 @@ name: Update Texas Weather
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
-      timezone: "America/Chicago"
-  workflow_dispatch:
+    # Every 2 hours at :20 past the hour (UTC).
+    # GitHub cron can drift ±15 min under load.
+    - cron: "20 */2 * * *"
+  workflow_dispatch: # allow manual runs from the Actions tab
 
 # Only one weather update at a time
 concurrency:
