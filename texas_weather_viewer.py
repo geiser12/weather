@@ -439,17 +439,25 @@ def compute_ranges(values, models, variables, dates):
 def precompute_geometry(lats, lons, texas_paths, factor=UPSAMPLE_FACTOR):
     """Compute the upsampled lat/lon mesh and the boolean Texas mask a
     single time. These never change between images since they only depend
-    on the fixed grid + state boundary, not on the weather values."""
+    on the fixed grid + state boundary, not on the weather values.
+
+    contains_points(radius=...) slightly expands the polygon so grid cells
+    that only graze the official boundary still count as inside — reduces
+    hairline gaps along the outline after upsampling.
+    """
     nlat_up = (len(lats) - 1) * factor + 1
     nlon_up = (len(lons) - 1) * factor + 1
     lat_up = np.linspace(lats[0], lats[-1], nlat_up)
     lon_up = np.linspace(lons[0], lons[-1], nlon_up)
     Lon, Lat = np.meshgrid(lon_up, lat_up)
 
+    # ~quarter of a source cell in degrees — enough to seal edges, not spill
+    edge_radius = max(SPACING, 0.5) * 0.35
+
     mask = np.zeros(Lon.shape, dtype=bool)
     pts = np.column_stack([Lon.ravel(), Lat.ravel()])
     for p in texas_paths:
-        mask |= p.contains_points(pts).reshape(Lon.shape)
+        mask |= p.contains_points(pts, radius=edge_radius).reshape(Lon.shape)
 
     # Also build a coarse-grid mask (same shape as the original field) so
     # H/L extrema can be restricted to cells that fall inside Texas.
@@ -457,12 +465,37 @@ def precompute_geometry(lats, lons, texas_paths, factor=UPSAMPLE_FACTOR):
     coarse_mask = np.zeros(Lon_c.shape, dtype=bool)
     pts_c = np.column_stack([Lon_c.ravel(), Lat_c.ravel()])
     for p in texas_paths:
-        coarse_mask |= p.contains_points(pts_c).reshape(Lon_c.shape)
+        coarse_mask |= p.contains_points(pts_c, radius=edge_radius).reshape(Lon_c.shape)
 
     return {
         "Lon": Lon, "Lat": Lat, "mask": mask, "factor": factor,
         "coarse_mask": coarse_mask,
     }
+
+
+def fill_inside_mask(field, mask):
+    """Nearest-neighbor fill for any NaN cells that still fall inside Texas.
+
+    After upsampling + masking, a few border pixels can remain empty when the
+    source grid is coarse relative to the coastline/panhandle. Pull values
+    from the nearest valid cell so the fill meets the black outline.
+    """
+    from scipy.ndimage import distance_transform_edt
+
+    out = np.array(field, dtype=float, copy=True)
+    inside_hole = mask & ~np.isfinite(out)
+    if not np.any(inside_hole):
+        return out
+    valid = np.isfinite(out)
+    if not np.any(valid):
+        return out
+    # indices of nearest valid cell for every pixel
+    _, (iy, ix) = distance_transform_edt(~valid, return_indices=True)
+    filled = out[iy, ix]
+    out[inside_hole] = filled[inside_hole]
+    # Anything outside the state stays NaN for plotting
+    out = np.where(mask, out, np.nan)
+    return out
 
 
 def upsample_field(field, target_shape, sigma=SMOOTH_SIGMA):
@@ -537,10 +570,12 @@ def render_image(field, lats, lons, texas_paths, var, model_label, date, hour,
     else:
         ax.set_facecolor("#dce5eb")
 
-    Lon, Lat, mask = geometry["Lon"], geometry["Lat"], geometry["mask"]
+    Lon, Lat = geometry["Lon"], geometry["Lat"]
     coarse_mask = geometry["coarse_mask"]
+    # Full rectangular frame is filled (OK, NM, LA, Gulf, Mexico, etc. visible
+    # outside the Texas outline). Outline is drawn on top for context.
     field_up = upsample_field(field, Lon.shape)
-    field_masked = np.where(mask, field_up, np.nan)
+    field_masked = field_up
 
     if var == "cloud_cover":
         cmap = mcolors.LinearSegmentedColormap.from_list(
@@ -1211,6 +1246,7 @@ def main():
 
     print("Grid + boundary…")
     points, lats, lons = generate_grid(TEXAS_BOUNDS, SPACING)
+    print(f"  data grid {len(lats)}×{len(lons)} = {len(points)} points")
     texas_geom = fetch_texas_boundary()
     texas_paths = polygon_to_mpl_path(texas_geom)
 
