@@ -1,5 +1,5 @@
 
-# Generate Texas weather maps on a schedule and publish to GitHub Pages.
+# Generate Texas weather maps on a schedule and publish to GitHub Pages
 #
 # Setup once in the repo:
 #   Settings → Pages → Build and deployment → Source: GitHub Actions
@@ -10,7 +10,7 @@ name: Update Texas Weather
 
 on:
   schedule:
-    # Every 2 hours at :20 past the hour (UTC).
+    #Every 2 hours at :20 past the hour (UTC).
     # GitHub cron can drift ±15 min under load.
     - cron: "20 */2 * * *"
   workflow_dispatch: # allow manual runs from the Actions tab
@@ -25,6 +25,7 @@ permissions:
   pages: write
   id-token: write
 
+# Add comment
 jobs:
   build:
     runs-on: ubuntu-latest
