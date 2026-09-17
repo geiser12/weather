@@ -1,0 +1,9 @@
+numpy>=1.26
+pandas>=2.0
+matplotlib>=3.8
+scipy>=1.11
+Pillow>=10.0
+requests>=2.31
+requests-cache>=1.1
+retry-requests>=2.0
+openmeteo-requests>=1.2
