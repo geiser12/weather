@@ -49,15 +49,15 @@ jobs:
 
       - name: Prepare Pages artifact
         run: |
-          test -f texas_weather/index.html
-          test -d texas_weather/images
-          du -sh texas_weather texas_weather/images || true
-          find texas_weather/images -type f | wc -l
+          test -f tx_model_viewer/index.html
+          test -d tx_model_viewer/images
+          du -sh tx_model_viewer tx_model_viewer/images || true
+          find tx_model_viewer/images -type f | wc -l
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: texas_weather
+          path: tx_model_viewer
 
   deploy:
     needs: build

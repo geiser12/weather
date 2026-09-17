@@ -65,7 +65,7 @@ SLEEP_BETWEEN_BATCHES = 1.8   # seconds between successful API calls
 UPSAMPLE_FACTOR = 6           # spatial upsampling; lower + less blur = sharper edges
 SMOOTH_SIGMA = 0.35           # light Gaussian only (0 = maximum sharpness; was 1.2)
 MAX_WORKERS = 16            # None = os.cpu_count()
-
+FETCH_DEADLINE_SECONDS = 180  # 3 minutes
 # Precipitation: aggregate consecutive hours into blocks of this size (sum of
 # inch amounts). 1 = keep hourly; 3 = 3-hour totals (recommended so light
 # rain becomes visible on the Blues scale). Only affects precipitation.
@@ -238,8 +238,25 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
     per_point = {m: {v: [None] * len(points) for v in variables} for m in models}
     timestamps_ref = None
     n_batches = math.ceil(len(points) / batch_size)
+    t_fetch0 = time.time()
+
+    def _remaining():
+        return FETCH_DEADLINE_SECONDS - (time.time() - t_fetch0)
+
+    def _check_deadline(where: str):
+        left = _remaining()
+        if left <= 0:
+            raise RuntimeError(
+                f"Open-Meteo fetch deadline exceeded ({FETCH_DEADLINE_SECONDS}s) at {where}. "
+                "Aborting so the workflow does not hang on rate limits / empty API."
+            )
+        return left
+
+    print(f"Fetching Open-Meteo ({n_batches} batches, deadline {FETCH_DEADLINE_SECONDS}s)…")
 
     for batch_idx, batch in enumerate(chunked(points, batch_size)):
+        _check_deadline(f"before batch {batch_idx+1}/{n_batches}")
+
         params = {
             "latitude": ",".join(str(p[0]) for p in batch),
             "longitude": ",".join(str(p[1]) for p in batch),
@@ -254,6 +271,7 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
 
         responses = None
         for attempt in range(1, 7):
+            _check_deadline(f"batch {batch_idx+1} attempt {attempt}")
             try:
                 responses = client.weather_api(
                     "https://api.open-meteo.com/v1/forecast", params=params
@@ -263,7 +281,15 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
                 msg = str(e).lower()
                 if "limit" in msg or "rate" in msg:
                     wait = 80 + attempt * 30
-                    print(f"  [rate limit] batch {batch_idx+1}/{n_batches} – waiting {wait}s")
+                    left = _remaining()
+                    if wait > left:
+                        raise RuntimeError(
+                            f"Rate limited on batch {batch_idx+1}/{n_batches}; "
+                            f"need to wait {wait}s but only {left:.0f}s left in "
+                            f"{FETCH_DEADLINE_SECONDS}s fetch deadline. Aborting."
+                        )
+                    print(f"  [rate limit] batch {batch_idx+1}/{n_batches} – waiting {wait}s "
+                          f"({left:.0f}s left in deadline)")
                     time.sleep(wait)
                     continue
                 print(f"  [error] batch {batch_idx+1}: {e}")
@@ -295,11 +321,14 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
                 except Exception:
                     pass
 
-        print(f"  fetched batch {batch_idx+1}/{n_batches}")
-        time.sleep(SLEEP_BETWEEN_BATCHES)
+        print(f"  fetched batch {batch_idx+1}/{n_batches} ({_remaining():.0f}s left in deadline)")
+        sleep_for = min(SLEEP_BETWEEN_BATCHES, max(0.0, _remaining() - 1.0))
+        if sleep_for > 0:
+            time.sleep(sleep_for)
 
     if timestamps_ref is None:
         raise RuntimeError("No data returned from Open-Meteo")
+    print(f"  fetch finished in {time.time() - t_fetch0:.0f}s")
     return per_point, timestamps_ref
 
 
