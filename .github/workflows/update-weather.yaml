@@ -1,3 +1,4 @@
+
 # Generate Texas weather maps on a schedule and publish to GitHub Pages.
 #
 # Setup once in the repo:
@@ -54,37 +55,38 @@ jobs:
           test -f texas_weather_viewer.py
           python texas_weather_viewer.py
           echo "After script:"
-          ls -la texas_weather 2>/dev/null || echo "texas_weather/ missing"
+          ls -la tx_model_viewer 2>/dev/null || echo "tx_model_viewer/ missing"
 
       - name: Prepare Pages artifact
         run: |
           set -euo pipefail
+          OUT=tx_model_viewer
           echo "Workspace contents:"
           ls -la
           echo "---"
-          if [ ! -d texas_weather ]; then
-            echo "::error::texas_weather/ directory was not created by the script."
-            echo "Check the Generate maps step log for Python errors / fetch deadline."
+          if [ ! -d "$OUT" ]; then
+            echo "::error::$OUT/ directory was not created by the script."
+            echo "Check OUTPUT_DIR in texas_weather_viewer.py and the Generate maps log."
             exit 1
           fi
-          ls -la texas_weather
-          if [ ! -f texas_weather/index.html ]; then
-            echo "::error::texas_weather/index.html missing — script did not finish."
+          ls -la "$OUT"
+          if [ ! -f "$OUT/index.html" ]; then
+            echo "::error::$OUT/index.html missing — script did not finish."
             exit 1
           fi
-          if [ ! -d texas_weather/images ]; then
-            echo "::error::texas_weather/images/ missing — no maps were written."
+          if [ ! -d "$OUT/images" ]; then
+            echo "::error::$OUT/images/ missing — no maps were written."
             exit 1
           fi
           echo "Artifact size:"
-          du -sh texas_weather texas_weather/images
-          echo "Image count: $(find texas_weather/images -type f | wc -l)"
-          test -f texas_weather/grid_data.js || echo "::warning::grid_data.js missing (probe will not work)"
+          du -sh "$OUT" "$OUT/images"
+          echo "Image count: $(find "$OUT/images" -type f | wc -l)"
+          test -f "$OUT/grid_data.js" || echo "::warning::grid_data.js missing (probe will not work)"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: texas_weather
+          path: tx_model_viewer
 
   deploy:
     needs: build

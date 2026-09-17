@@ -66,7 +66,12 @@ SLEEP_BETWEEN_BATCHES = 1.8   # seconds between successful API calls
 UPSAMPLE_FACTOR = 6           # spatial upsampling; lower + less blur = sharper edges
 SMOOTH_SIGMA = 0.35           # light Gaussian only (0 = maximum sharpness; was 1.2)
 MAX_WORKERS = 16            # None = os.cpu_count()
-FETCH_DEADLINE_SECONDS = 180  # 3 minutes
+FETCH_DEADLINE_SECONDS = 600
+
+# Per-batch retries for timeouts / rate limits / transient network errors.
+FETCH_MAX_ATTEMPTS = 6
+# Minimum fraction of grid points that must have data after fetch, else fail.
+FETCH_MIN_COVERAGE = 0.90
 # Precipitation: aggregate consecutive hours into blocks of this size (sum of
 # inch amounts). 1 = keep hourly; 3 = 3-hour totals (recommended so light
 # rain becomes visible on the Blues scale). Only affects precipitation.
@@ -174,6 +179,7 @@ CITY_LABEL_OFFSETS = {
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
+
 def generate_grid(bounds, spacing):
     # Use linspace (not arange) so the grid's last row/column always lands
     # exactly on max_lat / max_lon. arange(min, max, spacing) can fall up to
@@ -229,9 +235,19 @@ def polygon_to_mpl_path(geometry):
     return paths
 
 
+def _is_retryable_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    needles = (
+        "timeout", "timed out", "timeoutreached", "rate", "limit",
+        "429", "503", "502", "504", "connection", "reset", "broken pipe",
+        "temporarily", "unavailable", "stream",
+    )
+    return any(n in msg for n in needles)
+
+
 def fetch_all(points, models, variables, forecast_days, batch_size):
     cache_session = requests_cache.CachedSession(".texas_weather_cache", expire_after=1800)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.3)
+    retry_session = retry(cache_session, retries=3, backoff_factor=0.4)
     client = openmeteo_requests.Client(session=retry_session)
 
     n_models = len(models)
@@ -239,6 +255,7 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
     timestamps_ref = None
     n_batches = math.ceil(len(points) / batch_size)
     t_fetch0 = time.time()
+    failed_batches: list[int] = []
 
     def _remaining():
         return FETCH_DEADLINE_SECONDS - (time.time() - t_fetch0)
@@ -252,7 +269,8 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
             )
         return left
 
-    print(f"Fetching Open-Meteo ({n_batches} batches, deadline {FETCH_DEADLINE_SECONDS}s)…")
+    print(f"Fetching Open-Meteo ({n_batches} batches, deadline {FETCH_DEADLINE_SECONDS}s, "
+          f"up to {FETCH_MAX_ATTEMPTS} attempts/batch)…")
 
     for batch_idx, batch in enumerate(chunked(points, batch_size)):
         _check_deadline(f"before batch {batch_idx+1}/{n_batches}")
@@ -270,7 +288,8 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
         }
 
         responses = None
-        for attempt in range(1, 7):
+        last_err = None
+        for attempt in range(1, FETCH_MAX_ATTEMPTS + 1):
             _check_deadline(f"batch {batch_idx+1} attempt {attempt}")
             try:
                 responses = client.weather_api(
@@ -278,25 +297,40 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
                 )
                 break
             except Exception as e:
+                last_err = e
                 msg = str(e).lower()
-                if "limit" in msg or "rate" in msg:
-                    wait = 80 + attempt * 30
-                    left = _remaining()
-                    if wait > left:
-                        raise RuntimeError(
-                            f"Rate limited on batch {batch_idx+1}/{n_batches}; "
-                            f"need to wait {wait}s but only {left:.0f}s left in "
-                            f"{FETCH_DEADLINE_SECONDS}s fetch deadline. Aborting."
-                        )
-                    print(f"  [rate limit] batch {batch_idx+1}/{n_batches} – waiting {wait}s "
-                          f"({left:.0f}s left in deadline)")
-                    time.sleep(wait)
-                    continue
-                print(f"  [error] batch {batch_idx+1}: {e}")
-                break
+                if not _is_retryable_error(e):
+                    print(f"  [error] batch {batch_idx+1}/{n_batches} non-retryable: {e}")
+                    break
+
+                # Backoff: timeouts/network shorter; rate-limit longer
+                if "limit" in msg or "rate" in msg or "429" in msg:
+                    wait = min(90 + attempt * 30, 180)
+                else:
+                    wait = min(5 * attempt, 45)  # timeout / connection
+
+                left = _remaining()
+                if wait > left:
+                    raise RuntimeError(
+                        f"Retryable error on batch {batch_idx+1}/{n_batches} "
+                        f"(attempt {attempt}/{FETCH_MAX_ATTEMPTS}): {e}; "
+                        f"need to wait {wait}s but only {left:.0f}s left in "
+                        f"{FETCH_DEADLINE_SECONDS}s deadline. Aborting."
+                    )
+                print(
+                    f"  [retry] batch {batch_idx+1}/{n_batches} "
+                    f"attempt {attempt}/{FETCH_MAX_ATTEMPTS}: {e} "
+                    f"— waiting {wait}s ({left:.0f}s left in deadline)"
+                )
+                time.sleep(wait)
 
         if responses is None:
-            print(f"  Skipping batch {batch_idx+1}")
+            failed_batches.append(batch_idx + 1)
+            print(
+                f"  [FAILED] batch {batch_idx+1}/{n_batches} after "
+                f"{FETCH_MAX_ATTEMPTS} attempts"
+                + (f" (last: {last_err})" if last_err else "")
+            )
             continue
 
         for local_idx in range(len(batch)):
@@ -328,7 +362,22 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
 
     if timestamps_ref is None:
         raise RuntimeError("No data returned from Open-Meteo")
-    print(f"  fetch finished in {time.time() - t_fetch0:.0f}s")
+
+    # Coverage check: refuse to publish sparse grids after failed batches
+    sample_model, sample_var = models[0], variables[0]
+    filled = sum(1 for s in per_point[sample_model][sample_var] if s is not None)
+    coverage = filled / max(len(points), 1)
+    print(
+        f"  fetch finished in {time.time() - t_fetch0:.0f}s — "
+        f"coverage {filled}/{len(points)} points ({coverage:.0%})"
+    )
+    if failed_batches:
+        print(f"  failed batches: {failed_batches}")
+    if coverage < FETCH_MIN_COVERAGE:
+        raise RuntimeError(
+            f"Open-Meteo coverage too low ({coverage:.0%} < {FETCH_MIN_COVERAGE:.0%}); "
+            f"failed batches {failed_batches}. Not rendering incomplete maps."
+        )
     return per_point, timestamps_ref
 
 
@@ -1046,6 +1095,7 @@ playBtn.onclick = () => {
     }, 700);
   } else clearInterval(timer);
 };
+
 
 document.getElementById("subtitle").textContent =
   `${DATA.npoints} source points • ${DATA.models.length} models • high-res images`;
