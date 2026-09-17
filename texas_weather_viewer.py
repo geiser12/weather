@@ -35,6 +35,7 @@ import math
 import os
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -173,7 +174,6 @@ CITY_LABEL_OFFSETS = {
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
-
 def generate_grid(bounds, spacing):
     # Use linspace (not arange) so the grid's last row/column always lands
     # exactly on max_lat / max_lon. arange(min, max, spacing) can fall up to
@@ -787,13 +787,22 @@ button:hover { border-color: var(--accent); }
 .timeline {
   height: 78px; padding: 8px 18px; background: var(--panel);
   border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
 }
 #timeLabel { font-size: 13px; font-variant-numeric: tabular-nums; }
-input[type=range] { width: 100%; accent-color: var(--accent); }
+.slider-wrap { width: 100%; }
+input[type=range] {
+  width: 100%; accent-color: var(--accent);
+  margin: 0; display: block;
+}
 .hour-ticks {
   display: flex; justify-content: space-between; color: var(--muted);
   font-size: 9px; margin-top: 2px;
+  /* Match typical range thumb inset so labels sit under the track, not the ends */
+  padding: 0 10px 0 14px;
+  box-sizing: border-box;
 }
+.hour-ticks span { min-width: 2.4em; text-align: center; }
 /* Click-to-inspect popup */
 #probe {
   display: none; position: fixed; z-index: 50; min-width: 200px; max-width: 280px;
@@ -884,12 +893,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 </div>
 
 <div class="timeline">
-  <div style="display:flex; align-items:center; gap:12px;">
-    <span id="timeLabel"></span>
+  <span id="timeLabel"></span>
+  <div class="slider-wrap">
     <input type="range" id="hourSlider" min="0" max="23" value="12" step="1">
-  </div>
-  <div class="hour-ticks">
-    <span>HE 1</span><span>HE 7</span><span>HE 13</span><span>HE 19</span><span>HE 24</span>
+    <div class="hour-ticks">
+      <span>HE 1</span><span>HE 7</span><span>HE 13</span><span>HE 19</span><span>HE 24</span>
+    </div>
   </div>
 </div>
 
@@ -1044,7 +1053,7 @@ document.getElementById("refreshBtn").onclick = () => location.reload();
 document.getElementById("subtitle").textContent =
   `${DATA.npoints} source points • ${DATA.models.length} models • high-res images`;
 document.getElementById("lastUpdated").textContent =
-  `Last updated: ${DATA.generated_at} UTC`;
+  `Last updated: ${DATA.generated_at} CT`;
 
 dateSelect.value = currentDate;
 varSelect.value  = currentVar;
@@ -1300,7 +1309,7 @@ def main():
     export_grid_data(out_dir, lats, lons, values, MODELS, VARIABLES, dates)
 
     payload = {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "generated_at": datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d %H:%M"),
         "models": MODELS,
         "modelLabels": MODEL_LABELS,
         "variables": VARIABLES,

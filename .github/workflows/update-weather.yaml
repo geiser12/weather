@@ -9,9 +9,9 @@ name: Update Texas Weather
 
 on:
   schedule:
-    # ~every 6 hours (UTC). Adjust to taste.
+    # Every 2 hours at :20 past the hour (UTC).
     # GitHub cron can drift ±15 min under load.
-    - cron: "20 0,6,12,18 * * *"
+    - cron: "20 */2 * * *"
   workflow_dispatch: # allow manual runs from the Actions tab
 
 # Only one weather update at a time
@@ -45,19 +45,46 @@ jobs:
           pip install -r requirements.txt
 
       - name: Generate maps
-        run: python texas_weather_viewer.py
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          echo "Repo root: $(pwd)"
+          ls -la
+          test -f texas_weather_viewer.py
+          python texas_weather_viewer.py
+          echo "After script:"
+          ls -la texas_weather 2>/dev/null || echo "texas_weather/ missing"
 
       - name: Prepare Pages artifact
         run: |
-          test -f tx_model_viewer/index.html
-          test -d tx_model_viewer/images
-          du -sh tx_model_viewer tx_model_viewer/images || true
-          find tx_model_viewer/images -type f | wc -l
+          set -euo pipefail
+          echo "Workspace contents:"
+          ls -la
+          echo "---"
+          if [ ! -d texas_weather ]; then
+            echo "::error::texas_weather/ directory was not created by the script."
+            echo "Check the Generate maps step log for Python errors / fetch deadline."
+            exit 1
+          fi
+          ls -la texas_weather
+          if [ ! -f texas_weather/index.html ]; then
+            echo "::error::texas_weather/index.html missing — script did not finish."
+            exit 1
+          fi
+          if [ ! -d texas_weather/images ]; then
+            echo "::error::texas_weather/images/ missing — no maps were written."
+            exit 1
+          fi
+          echo "Artifact size:"
+          du -sh texas_weather texas_weather/images
+          echo "Image count: $(find texas_weather/images -type f | wc -l)"
+          test -f texas_weather/grid_data.js || echo "::warning::grid_data.js missing (probe will not work)"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: tx_model_viewer
+          path: texas_weather
 
   deploy:
     needs: build
