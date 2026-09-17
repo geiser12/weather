@@ -841,7 +841,6 @@ input[type=range] {
   </div>
   <div style="display:flex; align-items:center; gap:14px;">
     <div id="lastUpdated" style="font-size:11px; color:var(--muted);"></div>
-    <button id="refreshBtn">↻ Refresh</button>
   </div>
 </header>
 
@@ -1047,8 +1046,6 @@ playBtn.onclick = () => {
     }, 700);
   } else clearInterval(timer);
 };
-
-document.getElementById("refreshBtn").onclick = () => location.reload();
 
 document.getElementById("subtitle").textContent =
   `${DATA.npoints} source points • ${DATA.models.length} models • high-res images`;
