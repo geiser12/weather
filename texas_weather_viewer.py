@@ -73,7 +73,7 @@ FETCH_MAX_ATTEMPTS = 6
 # Minimum fraction of grid points that must have data after fetch, else fail.
 FETCH_MIN_COVERAGE = 0.90
 # Precipitation: aggregate consecutive hours into blocks of this size (sum of
-# inch amounts). 1 = keep hourly; 3 = 3-hour totals (recommended so light
+# mm amounts). 1 = keep hourly; 3 = 3-hour totals (recommended so light
 # rain becomes visible on the Blues scale). Only affects precipitation.
 PRECIP_AGG_HOURS = 3
 
@@ -119,12 +119,12 @@ VAR_META = {
         "cmap": "Blues", "vmin": 0, "vmax": 100,
     },
     "precipitation": {
-        "label": "Precipitation", "unit": "in",
+        "label": "Precipitation", "unit": "mm",
         "cmap": "Blues", "vmin": 0, "vmax": None,
     },
     "wind_speed_10m": {
         "label": "Wind Speed", "unit": "mph",
-        "cmap": "YlOrRd", "vmin": 0, "vmax": None,
+        "cmap": "wind_bg", "vmin": 0, "vmax": None,
     },
     "relative_humidity_2m": {
         "label": "Relative Humidity", "unit": "%",
@@ -176,6 +176,12 @@ CITY_LABEL_OFFSETS = {
     "Corpus Christi": (0.0, 0.25),    # north (coast)
     "Amarillo": (0.0, -0.15),         # slight south if needed near panhandle
 }
+
+# Highs/lows: how many top / bottom points to mark on the map, and the
+# minimum lat/lon separation (degrees) enforced between picks so all N
+# markers don't cluster on the same local bump.
+HL_COUNT = 3
+HL_MIN_SEP_DEG = 0.9
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -283,7 +289,7 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
             "timezone": "America/Chicago",
             "wind_speed_unit": "mph",
             "temperature_unit": "fahrenheit",
-            "precipitation_unit": "inch",
+            "precipitation_unit": "mm",
             "forecast_days": forecast_days,
         }
 
@@ -471,8 +477,8 @@ def compute_ranges(values, models, variables, dates):
                 if vmax <= vmin:
                     vmax = vmin + 1.0
                 if var == "precipitation":
-                    # Headroom + floor so light rain still uses color
-                    vmax = max(vmax * 1.1, 0.15)
+                    # Headroom + floor (mm) so light rain still uses color
+                    vmax = max(vmax * 1.1, 4.0)
                     vmin = 0.0
                 if var == "shortwave_radiation":
                     vmin = 0.0
@@ -582,14 +588,20 @@ def _contour_levels(var, vmin, vmax):
     if var == "relative_humidity_2m":
         return np.arange(0, 101, 10)
     if var == "precipitation":
-        # Nonlinear-ish thresholds (inches) so light rain is visible
-        base = [0.0, 0.01, 0.05, 0.1, 0.15, 0.25, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0, 3.0]
+        # mm thresholds, denser at the low end so light/moderate rain (the
+        # most common case) still shows real contrast instead of a single
+        # flat "any rain" color.
+        base = [0.0, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0,
+                10.0, 15.0, 20.0, 30.0, 40.0, 60.0, 80.0]
         levels = [x for x in base if x <= vmax * 1.05]
         if not levels or levels[-1] < vmax:
-            levels.append(max(vmax, levels[-1] + 0.25 if levels else 0.25))
+            levels.append(max(vmax, (levels[-1] if levels else 0) + 5.0))
         return np.array(levels, dtype=float)
     if var == "wind_speed_10m":
-        step = 2.0 if (vmax - vmin) < 30 else 5.0
+        # Finer steps than before so the map shows the same granularity the
+        # click-probe already reveals underneath.
+        rng = vmax - vmin
+        step = 1.0 if rng <= 15 else 2.0 if rng <= 30 else 3.0
         lo = 0.0
         hi = math.ceil(vmax / step) * step
         return np.arange(lo, hi + step * 0.5, step)
@@ -601,6 +613,35 @@ def _contour_levels(var, vmin, vmax):
         return np.arange(lo, hi + step * 0.5, step)
     # Fallback
     return np.linspace(vmin, vmax, 12)
+
+
+def _select_extrema(field, mask, lats, lons, n=HL_COUNT, mode="max",
+                     min_sep_deg=HL_MIN_SEP_DEG):
+    """Pick up to n (lat, lon, value) points that are local extrema and
+    spread out across the state, instead of just the single global max/min.
+
+    Greedily walks the sorted valid values and keeps a candidate only if
+    it's at least min_sep_deg (in both lat and lon) away from every point
+    already picked, so 3 highs/lows don't all land on the same hot spot.
+    """
+    Lon_c, Lat_c = np.meshgrid(lons, lats)
+    valid = mask & np.isfinite(field)
+    if not np.any(valid):
+        return []
+    vals = field[valid]
+    las = Lat_c[valid]
+    los = Lon_c[valid]
+    order = np.argsort(-vals) if mode == "max" else np.argsort(vals)
+
+    selected = []
+    for idx in order:
+        la, lo, v = float(las[idx]), float(los[idx]), float(vals[idx])
+        if all(abs(la - sla) >= min_sep_deg or abs(lo - slo) >= min_sep_deg
+               for sla, slo, _ in selected):
+            selected.append((la, lo, v))
+        if len(selected) >= n:
+            break
+    return selected
 
 
 # ── Rendering ───────────────────────────────────────────────────────────
@@ -629,6 +670,14 @@ def render_image(field, lats, lons, texas_paths, var, model_label, date, hour,
     if var == "cloud_cover":
         cmap = mcolors.LinearSegmentedColormap.from_list(
             "clouds", ["#1a4a7a", "#8eb4d9", "#ffffff"], N=256
+        )
+    elif var == "wind_speed_10m":
+        # Blue (calm) -> teal -> green (windy), with enough stops for a
+        # smooth ramp once it's cut into fine contour levels.
+        cmap = mcolors.LinearSegmentedColormap.from_list(
+            "wind_bg",
+            ["#08306b", "#2166ac", "#4393c3", "#66c2a4", "#238b45", "#00441b"],
+            N=256,
         )
     else:
         cmap = plt.get_cmap(VAR_META[var]["cmap"])
@@ -684,7 +733,7 @@ def render_image(field, lats, lons, texas_paths, var, model_label, date, hour,
 
     def _fmt(val):
         if var == "precipitation":
-            return f"{val:.2f}"
+            return f"{val:.1f}"
         return f"{val:.0f}"
 
     # Named cities: name + value, with optional inward offset for border cities
@@ -711,19 +760,16 @@ def render_image(field, lats, lons, texas_paths, var, model_label, date, hour,
         ax.text(clon, clat - 0.18, _fmt(val), fontsize=6.5, ha="center", va="top",
                 color="#111", fontweight="bold", zorder=7)
 
-    # Highs / lows restricted to cells inside the Texas boundary
-    inside = np.isfinite(field) & coarse_mask
-    if np.any(inside):
-        masked_field = np.where(inside, field, np.nan)
-        hi_val = np.nanmax(masked_field)
-        lo_val = np.nanmin(masked_field)
-        hi_idx = np.unravel_index(np.nanargmax(masked_field), field.shape)
-        lo_idx = np.unravel_index(np.nanargmin(masked_field), field.shape)
-        # Skip H/L for precip probability / cloud if they are just 0/100 noise
-        if var not in ("precipitation_probability",):
-            ax.text(lons[hi_idx[1]], lats[hi_idx[0]], f"H {hi_val:.0f}",
+    # Highs / lows: top-N / bottom-N distinct points restricted to cells
+    # inside the Texas boundary (skip for precip probability — 0/100 noise).
+    if var not in ("precipitation_probability",):
+        highs = _select_extrema(field, coarse_mask, lats, lons, mode="max")
+        lows = _select_extrema(field, coarse_mask, lats, lons, mode="min")
+        for la, lo, v in highs:
+            ax.text(lo, la, f"H {_fmt(v)}",
                     fontsize=8, fontweight="bold", color="#111", ha="center", zorder=8)
-            ax.text(lons[lo_idx[1]], lats[lo_idx[0]], f"L {lo_val:.0f}",
+        for la, lo, v in lows:
+            ax.text(lo, la, f"L {_fmt(v)}",
                     fontsize=8, fontweight="bold", color="#111", ha="center", zorder=8)
 
     ax.text(0.02, 0.97, model_label, transform=ax.transAxes,
@@ -1143,7 +1189,7 @@ function nearestIndex(arr, val) {
 
 function fmtVal(varKey, v) {
   if (v == null || Number.isNaN(v)) return "—";
-  if (varKey === "precipitation") return v.toFixed(2);
+  if (varKey === "precipitation") return v.toFixed(1);
   if (varKey === "cloud_cover" || varKey === "precipitation_probability"
       || varKey === "relative_humidity_2m")
     return Math.round(v).toString();
@@ -1247,14 +1293,13 @@ def export_grid_data(out_dir, lats, lons, values, models, variables, dates):
     the file:// protocol in most browsers.
 
     Values are rounded per-variable to keep the file small. Flat row-major
-    arrays (nlat * nlon) per hour. Typical size at 0.5° / 2 days / 4 models /
-    6 vars: a few MB; loaded async so first paint stays fast.
+    arrays (nlat * nlon) per hour.
     """
     def _round_arr(var, arr):
         a = np.asarray(arr, dtype=float)
         out = a.ravel().tolist()
         if var == "precipitation":
-            return [None if (x is None or not np.isfinite(x)) else round(float(x), 3)
+            return [None if (x is None or not np.isfinite(x)) else round(float(x), 2)
                     for x in out]
         if var in ("cloud_cover", "precipitation_probability", "relative_humidity_2m"):
             return [None if (x is None or not np.isfinite(x)) else int(round(float(x)))
