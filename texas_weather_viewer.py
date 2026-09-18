@@ -855,17 +855,17 @@ button:hover { border-color: var(--accent); }
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
 }
+
 #maps.layout-2 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr;
 }
+
 #maps.layout-3 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr;
 }
-#maps.layout-3 .panel:nth-child(3) {
-  grid-column: 1 / -1;
-}
+
 #maps.layout-4 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
