@@ -764,6 +764,113 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   border-radius: 8px; padding: 10px 12px; pointer-events: none;
   box-shadow: 0 8px 28px rgba(0,0,0,0.45); font-size: 12px;
 }
+
+/* ── Mobile / narrow screens ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  html, body {
+    overflow: auto;                 /* allow vertical scroll */
+    height: auto;
+    min-height: 100%;
+  }
+  body {
+    display: block;                 /* drop the flex column that was locking heights */
+  }
+
+  header {
+    height: auto;
+    padding: 10px 12px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .title { font-size: 15px; }
+  .subtitle { font-size: 10px; }
+
+  .controls {
+    padding: 8px 12px;
+    gap: 8px 10px;
+    /* keep flex-wrap; just give it room to grow */
+  }
+  .controls > div {
+    min-width: 0;
+  }
+  /* Make the four model selects stack nicer */
+  #modelSelects {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .model-select-wrap {
+    flex: 1 1 45%;
+    min-width: 120px;
+  }
+  .toggles {
+    flex-wrap: wrap;
+    height: auto;
+    row-gap: 6px;
+  }
+  #opacityRange { width: 70px; }
+
+  /* Maps area – give it a sensible minimum height so it doesn't collapse */
+  #maps {
+    min-height: 52vh;               /* keeps maps visible */
+    height: 52vh;
+  }
+  #maps.layout-2,
+  #maps.layout-3,
+  #maps.layout-4 {
+    grid-template-columns: 1fr;     /* single column on phones */
+    grid-template-rows: repeat(auto-fit, minmax(180px, 1fr));
+  }
+  /* When user picks 1-panel it already looks good */
+
+  .legend {
+    height: auto;
+    padding: 6px 12px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  #legendLabel { min-width: 0; font-size: 11px; }
+  #legend { max-width: none; width: 100%; height: 32px; }
+
+  .timeline {
+    height: auto;
+    padding: 10px 12px 14px;
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.35);
+  }
+  #timeLabel { font-size: 12px; }
+  .hour-ticks { font-size: 8px; padding: 0 6px; }
+
+  /* Probe needs a bit more room on small screens */
+  #probe {
+    max-width: min(290px, 92vw);
+    font-size: 11px;
+  }
+
+  /* Hide the least-critical desktop-only hint */
+  #probeHint { display: none; }
+}
+
+/* Extra-small phones */
+@media (max-width: 420px) {
+  .controls {
+    gap: 6px 8px;
+  }
+  select, button {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+  .model-select-wrap {
+    flex: 1 1 100%;
+  }
+  #maps {
+    min-height: 46vh;
+    height: 46vh;
+  }
+}
 #probe .probe-title { font-weight: 650; font-size: 12px; margin-bottom: 2px; color: var(--accent); }
 #probe .probe-loc { color: var(--muted); font-size: 10px; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
 #probe table { width: 100%; border-collapse: collapse; }
