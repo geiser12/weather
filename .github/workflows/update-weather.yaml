@@ -71,14 +71,14 @@ jobs:
             echo "::error::$OUT/index.html missing — script did not finish."
             exit 1
           fi
-          if [ ! -d "$OUT/images" ]; then
-            echo "::error::$OUT/images/ missing — no maps were written."
+          if [ ! -f "$OUT/grid_data.js" ]; then
+            echo "::error::$OUT/grid_data.js missing — no data was written."
             exit 1
           fi
           echo "Artifact size:"
-          du -sh "$OUT" "$OUT/images"
-          echo "Image count: $(find "$OUT/images" -type f | wc -l)"
-          test -f "$OUT/grid_data.js" || echo "::warning::grid_data.js missing (probe will not work)"
+          du -sh "$OUT"
+          echo "Contents:"
+          ls -lh "$OUT"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
