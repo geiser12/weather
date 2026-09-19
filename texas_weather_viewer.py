@@ -1,91 +1,85 @@
 #!/usr/bin/env python3
 """
-Texas Multi-Model Weather Viewer – High Quality Image Edition (Optimized)
+Texas Multi-Model Weather Viewer – Ventusky-style WebGL edition
+===============================================================
 All settings are configured below – no command-line arguments needed.
 
-Performance changes vs. the original:
-  1. The upsampled lat/lon mesh and the Texas boundary mask are computed
-     ONCE and reused for every image, instead of being recomputed from
-     scratch (including a scipy.ndimage.zoom + Path.contains_points call)
-     on every single one of the ~1,000+ images.
-  2. Image rendering is parallelized across CPU cores with
-     ProcessPoolExecutor, since each image is fully independent.
-  3. Dropped `optimize=True` on PNG save (slow, not needed for a local
-     viewer) and dropped `bbox_inches="tight"` (forces an extra expensive
-     layout pass on every save) in favor of a fixed layout computed once.
+What changed vs. the PNG edition
+--------------------------------
+  * NO images are rendered. Python fetches + cleans the model data and writes
+    ONE compact binary data file (grid_data.js, 16-bit quantised, base64) plus
+    index.html. The browser draws every map on the GPU (WebGL2).
+  * Smooth raster instead of contourf: bicubic (Catmull-Rom) interpolation in
+    the fragment shader, clamped to the local min/max of the four surrounding
+    cells, so there is no spline ringing and no 0-vs-1 % slivers.
+  * Fixed, non-linear, Ventusky-style colour scales with a transparent low end
+    (tiny precip / PoP values simply don't draw). Same colour = same value for
+    every hour and every model.
+  * Real base map under the data (Natural Earth land/sea + state borders),
+    Texas outline on top, optional dimming of everything outside Texas.
+  * Overlays drawn client-side with halo text: animated wind flow, labelled
+    isobars, isotherms, city values, H/L markers.
+  * Hourly OR 3-hour precipitation as separate layers (no more identical maps
+    on consecutive slider positions), plus pressure (MSL).
+  * Smooth cross-fade between hours while playing.
+  * Correct map aspect ratio (cos(latitude) correction) and click-probe maths.
 
-Updates in this edition:
-  - Highs/lows are computed only over grid cells that fall inside the Texas
-    boundary mask (not the full rectangular bounding box).
-  - Extra value-only stations: Fredericksburg, Killeen, Tyler, San Angelo
-    (value only, no city name).
-  - City labels near the state border are nudged inward so name + value stay
-    readable and do not clip against the outline.
-  - Precipitation: optional 3-hour block aggregation (sum) so values are
-    larger and the Blues colormap shows meaningful contrast.
-  - Sharper rendering: denser source grid (0.5°), higher DPI, much less
-    Gaussian blur, and Tropical Tidbits–style discrete filled contours with
-    thin black isopleths (USE_FILLED_CONTOURS=True).
+Outputs (in OUTPUT_DIR):  index.html  +  grid_data.js   (works from file://)
+
+Needs:  numpy pandas scipy requests openmeteo_requests requests_cache retry_requests
+Offline test:  TX_DEMO=1 python texas_weather_viewer.py   (synthetic data)
 """
 
 from __future__ import annotations
-import io
+
+import base64
 import json
 import math
 import os
 import time
+import warnings
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from zoneinfo import ZoneInfo
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-from matplotlib.path import Path as MplPath
-from matplotlib.patches import PathPatch
 import numpy as np
 import pandas as pd
-from PIL import Image
-import openmeteo_requests
-import requests_cache
-from retry_requests import retry
 import requests
 
 # ============================================================================
 # SETTINGS – edit these
 # ============================================================================
 
-SPACING = 1          # grid spacing in degrees (0.5 = denser/sharper, 0.75/1.0 = faster)
-FORECAST_DAYS = 2      # number of days to fetch
-BATCH_SIZE = 100        # points per API request (lower = safer against rate limits)
+SPACING = 0.5                  # grid spacing in degrees (0.5 recommended; 0.75/1.0 = fewer API calls)
+FORECAST_DAYS = 2              # number of days to fetch
+BATCH_SIZE = 100               # points per API request (lower = safer against rate limits)
 OUTPUT_DIR = "tx_model_viewer"
-DPI = 160              # image quality (150–180 is sharp without huge files)
-SLEEP_BETWEEN_BATCHES = 1.8   # seconds between successful API calls
-UPSAMPLE_FACTOR = 6           # spatial upsampling; lower + less blur = sharper edges
-SMOOTH_SIGMA = 0.35           # light Gaussian only (0 = maximum sharpness; was 1.2)
-MAX_WORKERS = 16            # None = os.cpu_count()
+SLEEP_BETWEEN_BATCHES = 1.8    # seconds between successful API calls
 FETCH_DEADLINE_SECONDS = 600
 
 # Per-batch retries for timeouts / rate limits / transient network errors.
 FETCH_MAX_ATTEMPTS = 6
 # Minimum fraction of grid points that must have data after fetch, else fail.
 FETCH_MIN_COVERAGE = 0.90
-# Precipitation: aggregate consecutive hours into blocks of this size (sum of
-# mm amounts). 1 = keep hourly; 3 = 3-hour totals (recommended so light
-# rain becomes visible on the Blues scale). Only affects precipitation.
-PRECIP_AGG_HOURS = 3
 
-# Tropical Tidbits–style discrete filled contours (True) vs continuous pcolormesh.
-# Discrete levels + thin black contour lines look sharper and more like operational
-# model guidance pages.
-USE_FILLED_CONTOURS = True
-CONTOUR_LINE_WIDTH = 0.35     # thin isopleths over the fill (0 to disable)
+# Highs/lows: how many top / bottom points to mark, and the minimum lat/lon
+# separation (degrees) between picks so they don't cluster on one bump.
+HL_COUNT = 3
+HL_MIN_SEP_DEG = 0.9
+
+# Base map (Natural Earth land + Census state borders) is downloaded once and
+# cached next to the script so repeated runs are fast / offline-friendly.
+BASEMAP_CACHE = Path(".texas_basemap_cache.json")
+BASEMAP_MAX_AGE_DAYS = 30
+BASEMAP_PAD_DEG = 1.0          # geometry is clipped to the map bounds + this pad
+
+# Synthetic data instead of the API (for testing the viewer offline).
+DEMO_MODE = os.environ.get("TX_DEMO", "0") == "1"
 
 # ============================================================================
 
 TEXAS_BOUNDS = {"min_lat": 25.7, "max_lat": 36.6, "min_lon": -106.7, "max_lon": -93.4}
+TIMEZONE = "America/Chicago"
 
 MODELS = ["ecmwf_ifs", "gfs_hrrr", "ncep_nam_conus", "gfs_global"]
 MODEL_LABELS = {
@@ -95,49 +89,86 @@ MODEL_LABELS = {
     "gfs_global": "GFS",
 }
 
-VARIABLES = [
+# Exactly 10 hourly variables (Open-Meteo counts >10 as extra API calls).
+FETCH_VARS = [
     "temperature_2m", "apparent_temperature", "cloud_cover",
     "precipitation_probability", "precipitation", "wind_speed_10m",
-    "relative_humidity_2m", "shortwave_radiation",
+    "wind_direction_10m", "relative_humidity_2m", "shortwave_radiation",
+    "pressure_msl",
 ]
 
-VAR_META = {
-    "temperature_2m": {
-        "label": "Temperature", "unit": "°F",
-        "cmap": "RdYlBu_r", "vmin": None, "vmax": None,
-    },
-    "apparent_temperature": {
-        "label": "Feels Like", "unit": "°F",
-        "cmap": "RdYlBu_r", "vmin": None, "vmax": None,
-    },
-    "cloud_cover": {
-        "label": "Cloud Cover", "unit": "%",
-        "cmap": "gray_r", "vmin": 0, "vmax": 100,
-    },
-    "precipitation_probability": {
-        "label": "Precip Probability", "unit": "%",
-        "cmap": "Blues", "vmin": 0, "vmax": 100,
-    },
-    "precipitation": {
-        "label": "Precipitation", "unit": "mm",
-        "cmap": "Blues", "vmin": 0, "vmax": None,
-    },
-    "wind_speed_10m": {
-        "label": "Wind Speed", "unit": "mph",
-        "cmap": "wind_bg", "vmin": 0, "vmax": None,
-    },
-    "relative_humidity_2m": {
-        "label": "Relative Humidity", "unit": "%",
-        "cmap": "YlGnBu", "vmin": 0, "vmax": 100,
-    },
-    "shortwave_radiation": {
-        "label": "Solar Radiation", "unit": "W/m²",
-        "cmap": "YlOrBr", "vmin": 0, "vmax": None,
-    },
-}
+# Layers shown in the "Variable" dropdown (some are derived from FETCH_VARS).
+LAYERS = [
+    "temperature_2m", "apparent_temperature", "cloud_cover",
+    "precipitation_probability", "precipitation", "precip_3h",
+    "wind_speed_10m", "relative_humidity_2m", "shortwave_radiation",
+    "pressure_msl",
+]
+# Everything shipped to the browser (layers + wind components for the flow).
+ENC_VARS = LAYERS + ["wind_u", "wind_v"]
 
-# Full labels: name + value. Near-border cities get an inward nudge so text
-# stays inside the state outline.
+# ── Colour scales ────────────────────────────────────────────────────────
+# (value, "#rrggbb" or "#rrggbbaa"). Colours are interpolated between stops
+# in premultiplied RGBA, so a transparent first stop fades in cleanly.
+
+TEMP_STOPS = [
+    (-20, "#6a3d9a"), (0, "#3b4cc0"), (15, "#3a7bd5"), (25, "#38a8e8"),
+    (32, "#7fd4f0"), (40, "#72e0c8"), (50, "#7fdc86"), (60, "#c2e86a"),
+    (70, "#f7e45c"), (80, "#fbb03b"), (90, "#f47b2a"), (100, "#e0392a"),
+    (110, "#a81d5c"), (120, "#6a1470"),
+]
+PRECIP_STOPS = [
+    (0.0, "#7fc4ff00"), (0.05, "#8fcaff40"), (0.2, "#6db6ff99"),
+    (0.5, "#3d8bffcc"), (1.0, "#2a5fe0"), (2.5, "#2bbf5a"), (5.0, "#f2e83a"),
+    (10.0, "#f59a23"), (20.0, "#e0341f"), (40.0, "#a3126f"), (80.0, "#6a0dad"),
+]
+PRECIP_3H_STOPS = [(round(v * 2.5, 3), c) for v, c in PRECIP_STOPS]
+POP_STOPS = [
+    (0, "#6ec6ff00"), (10, "#6ec6ff00"), (25, "#6ec6ff66"), (40, "#3d8bff99"),
+    (60, "#2a5fe0cc"), (80, "#5b2fc9ee"), (100, "#7a1fa2"),
+]
+CLOUD_STOPS = [
+    (0, "#f4f7fa00"), (10, "#f4f7fa00"), (30, "#f4f7fa70"), (60, "#dfe6eeb8"),
+    (80, "#b8c4d2e0"), (100, "#8e9db0f2"),
+]
+WIND_STOPS = [
+    (0, "#4a6fe322"), (5, "#4aa3e3"), (10, "#3ec9a7"), (15, "#6ed35b"),
+    (20, "#c9e04a"), (25, "#f5c43a"), (35, "#f28a2b"), (45, "#e0402a"),
+    (60, "#a3126f"), (80, "#6a0dad"),
+]
+RH_STOPS = [
+    (0, "#b5763a"), (20, "#d9b46a"), (35, "#e9e2a0"), (50, "#b6e3a8"),
+    (65, "#7fd0c0"), (80, "#4aa3e3"), (100, "#2a4fc0"),
+]
+SOLAR_STOPS = [
+    (0, "#ffe9a000"), (50, "#ffe9a055"), (200, "#ffd35c"), (400, "#ffb03a"),
+    (600, "#f5822a"), (800, "#e0502a"), (1000, "#b81f3a"), (1200, "#7a1050"),
+]
+PRESSURE_STOPS = [
+    (960, "#5b2c83"), (980, "#3a6fd0"), (995, "#4ab0e0"), (1005, "#9fe0d0"),
+    (1013, "#f2f2c0"), (1020, "#f7d38a"), (1030, "#f0995a"), (1040, "#d0503a"),
+]
+
+# label, unit, decimals shown, stops, (quantisation lo, hi), LUT power
+# (power < 1 gives the low end of the scale more colour resolution)
+VAR_META = {
+    "temperature_2m":            ("Temperature",          "°F",   0, TEMP_STOPS,      (-60, 140),   1.0),
+    "apparent_temperature":      ("Feels Like",           "°F",   0, TEMP_STOPS,      (-80, 150),   1.0),
+    "cloud_cover":               ("Cloud Cover",          "%",    0, CLOUD_STOPS,     (0, 100),     1.0),
+    "precipitation_probability": ("Precip Probability",   "%",    0, POP_STOPS,       (0, 100),     1.0),
+    "precipitation":             ("Precipitation (1 h)",  "mm",   1, PRECIP_STOPS,    (0, 200),     0.5),
+    "precip_3h":                 ("Precipitation (3 h)",  "mm",   1, PRECIP_3H_STOPS, (0, 400),     0.5),
+    "wind_speed_10m":            ("Wind Speed",           "mph",  0, WIND_STOPS,      (0, 150),     1.0),
+    "relative_humidity_2m":      ("Relative Humidity",    "%",    0, RH_STOPS,        (0, 100),     1.0),
+    "shortwave_radiation":       ("Solar Radiation",      "W/m²", 0, SOLAR_STOPS,     (0, 1500),    1.0),
+    "pressure_msl":              ("Pressure (MSL)",       "hPa",  0, PRESSURE_STOPS,  (850, 1100),  1.0),
+}
+QUANT = {v: VAR_META[v][4] for v in VAR_META}
+QUANT["wind_u"] = (-150.0, 150.0)
+QUANT["wind_v"] = (-150.0, 150.0)
+
+# Full labels: name + value. CITY_LABEL_OFFSETS pulls border cities' text
+# inward (the value is still sampled at the true city coordinates).
 CITIES = [
     ("El Paso", 31.7619, -106.4850),
     ("Amarillo", 35.2220, -101.8313),
@@ -155,44 +186,33 @@ CITIES = [
     ("Brownsville", 25.9017, -97.4975),
     ("Beaumont", 30.0802, -94.1266),
 ]
-
-# Value-only markers (no city name drawn). Useful for denser coverage
-# without cluttering the map with extra text.
+# Value-only markers (no city name drawn).
 VALUE_ONLY_CITIES = [
     ("Fredericksburg", 30.2752, -98.8720),
     ("Killeen", 31.1171, -97.7278),
     ("Tyler", 32.3513, -95.3011),
     ("San Angelo", 31.4638, -100.4370),
 ]
-
-# Per-city label offset (degrees) to pull name/value away from the border.
-# Applied only when drawing text; the sample point for the value stays at
-# the true city coordinates.
 CITY_LABEL_OFFSETS = {
-    "El Paso": (0.15, 0.35),          # east + north (away from western border)
-    "Brownsville": (0.0, 0.35),       # north (away from southern border)
-    "Beaumont": (-0.25, 0.15),        # west + a bit north (away from eastern border)
-    "Laredo": (0.25, 0.15),           # east (away from western border)
-    "Corpus Christi": (0.0, 0.25),    # north (coast)
-    "Amarillo": (0.0, -0.15),         # slight south if needed near panhandle
+    "El Paso": (0.15, 0.35),
+    "Brownsville": (0.0, 0.35),
+    "Beaumont": (-0.25, 0.15),
+    "Laredo": (0.25, 0.15),
+    "Corpus Christi": (0.0, 0.25),
+    "Amarillo": (0.0, -0.15),
 }
 
-# Highs/lows: how many top / bottom points to mark on the map, and the
-# minimum lat/lon separation (degrees) enforced between picks so all N
-# markers don't cluster on the same local bump.
-HL_COUNT = 3
-HL_MIN_SEP_DEG = 0.9
+TIGER_URL = ("https://tigerweb.geo.census.gov/arcgis/rest/services/"
+             "TIGERweb/State_County/MapServer/15/query")
+NE_LAND_URL = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/"
+               "master/geojson/ne_50m_land.geojson")
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────
+# ── Grid / fetch helpers ──────────────────────────────────────────────────
 
 def generate_grid(bounds, spacing):
-    # Use linspace (not arange) so the grid's last row/column always lands
-    # exactly on max_lat / max_lon. arange(min, max, spacing) can fall up to
-    # `spacing` degrees short of the true bound due to how the step count
-    # rounds, which silently clips real coverage (e.g. the top of the
-    # panhandle or the eastern border) even though the axis limits still
-    # show the full bounding box.
+    # linspace (not arange) so the last row/column lands exactly on max_lat /
+    # max_lon. The browser relies on the grid spanning the bounds exactly.
     n_lat = int(np.ceil((bounds["max_lat"] - bounds["min_lat"]) / spacing)) + 1
     n_lon = int(np.ceil((bounds["max_lon"] - bounds["min_lon"]) / spacing)) + 1
     lats = np.linspace(bounds["min_lat"], bounds["max_lat"], n_lat)
@@ -206,41 +226,6 @@ def chunked(seq, size):
         yield seq[i:i + size]
 
 
-def fetch_texas_boundary():
-    url = ("https://tigerweb.geo.census.gov/arcgis/rest/services/"
-           "TIGERweb/State_County/MapServer/15/query")
-    params = {"where": "STATE='48'", "outFields": "*", "returnGeometry": "true",
-              "f": "geojson", "outSR": "4326"}
-    try:
-        r = requests.get(url, params=params, timeout=30)
-        r.raise_for_status()
-        return r.json()["features"][0]["geometry"]
-    except Exception as e:
-        print(f"[warn] Boundary download failed: {e}")
-        return {
-            "type": "Polygon",
-            "coordinates": [[
-                [TEXAS_BOUNDS["min_lon"], TEXAS_BOUNDS["min_lat"]],
-                [TEXAS_BOUNDS["max_lon"], TEXAS_BOUNDS["min_lat"]],
-                [TEXAS_BOUNDS["max_lon"], TEXAS_BOUNDS["max_lat"]],
-                [TEXAS_BOUNDS["min_lon"], TEXAS_BOUNDS["max_lat"]],
-                [TEXAS_BOUNDS["min_lon"], TEXAS_BOUNDS["min_lat"]],
-            ]]
-        }
-
-
-def polygon_to_mpl_path(geometry):
-    paths = []
-    if geometry["type"] == "Polygon":
-        for ring in geometry["coordinates"]:
-            paths.append(MplPath([(x, y) for x, y in ring]))
-    elif geometry["type"] == "MultiPolygon":
-        for poly in geometry["coordinates"]:
-            for ring in poly:
-                paths.append(MplPath([(x, y) for x, y in ring]))
-    return paths
-
-
 def _is_retryable_error(exc: Exception) -> bool:
     msg = str(exc).lower()
     needles = (
@@ -252,6 +237,10 @@ def _is_retryable_error(exc: Exception) -> bool:
 
 
 def fetch_all(points, models, variables, forecast_days, batch_size):
+    import openmeteo_requests
+    import requests_cache
+    from retry_requests import retry
+
     cache_session = requests_cache.CachedSession(".texas_weather_cache", expire_after=1800)
     retry_session = retry(cache_session, retries=3, backoff_factor=0.4)
     client = openmeteo_requests.Client(session=retry_session)
@@ -286,7 +275,7 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
             "longitude": ",".join(str(p[1]) for p in batch),
             "hourly": variables,
             "models": models,
-            "timezone": "America/Chicago",
+            "timezone": TIMEZONE,
             "wind_speed_unit": "mph",
             "temperature_unit": "fahrenheit",
             "precipitation_unit": "mm",
@@ -309,11 +298,10 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
                     print(f"  [error] batch {batch_idx+1}/{n_batches} non-retryable: {e}")
                     break
 
-                # Backoff: timeouts/network shorter; rate-limit longer
                 if "limit" in msg or "rate" in msg or "429" in msg:
                     wait = min(90 + attempt * 30, 180)
                 else:
-                    wait = min(5 * attempt, 45)  # timeout / connection
+                    wait = min(5 * attempt, 45)
 
                 left = _remaining()
                 if wait > left:
@@ -369,7 +357,6 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
     if timestamps_ref is None:
         raise RuntimeError("No data returned from Open-Meteo")
 
-    # Coverage check: refuse to publish sparse grids after failed batches
     sample_model, sample_var = models[0], variables[0]
     filled = sum(1 for s in per_point[sample_model][sample_var] if s is not None)
     coverage = filled / max(len(points), 1)
@@ -382,442 +369,322 @@ def fetch_all(points, models, variables, forecast_days, batch_size):
     if coverage < FETCH_MIN_COVERAGE:
         raise RuntimeError(
             f"Open-Meteo coverage too low ({coverage:.0%} < {FETCH_MIN_COVERAGE:.0%}); "
-            f"failed batches {failed_batches}. Not rendering incomplete maps."
+            f"failed batches {failed_batches}. Not publishing incomplete maps."
         )
     return per_point, timestamps_ref
 
 
-def build_values(points, lats, lons, models, variables, per_point, timestamps_ref):
-    dates = sorted({ts.date().isoformat() for ts in timestamps_ref})
-    nlat, nlon = len(lats), len(lons)
-    values = {m: {v: {} for v in variables} for m in models}
+# ── Array building / cleaning ─────────────────────────────────────────────
 
-    for model in models:
-        for var in variables:
-            series_list = per_point[model][var]
-            filled = [s if s is not None else pd.Series(np.nan, index=timestamps_ref)
-                      for s in series_list]
-            df = pd.concat(filled, axis=1)
-            for date in dates:
-                day_index = [pd.Timestamp(date) + pd.Timedelta(hours=h) for h in range(24)]
-                sub = df.reindex(day_index).to_numpy(dtype=float)
-                fields = []
-                for row in sub:
-                    arr = row.reshape(nlat, nlon)
-                    fields.append(arr)
-                values[model][var][date] = fields
-    return values, dates
+def build_arrays(lats, lons, models, variables, per_point, timestamps_ref):
+    """per_point -> {model: {var: float32 array (T, nlat, nlon)}}"""
+    nlat, nlon, T = len(lats), len(lons), len(timestamps_ref)
+    nan_series = pd.Series(np.nan, index=timestamps_ref)
+    arrs = {m: {} for m in models}
+    for m in models:
+        for v in variables:
+            cols = [s if s is not None else nan_series for s in per_point[m][v]]
+            df = pd.concat(cols, axis=1).reindex(timestamps_ref)
+            arrs[m][v] = df.to_numpy(dtype=np.float32).reshape(T, nlat, nlon)
+    return arrs
 
 
-def aggregate_precip_3h(values, models, dates, block=PRECIP_AGG_HOURS):
-    """Replace hourly precipitation fields with summed N-hour blocks.
-
-    For each day, hours 0..23 become block totals:
-      hour h  →  sum of hours (h // block)*block  ..  (h // block)*block + block - 1
-    (with the last partial block summing whatever remains).  This keeps the
-    same 24 slots in the UI/slider while making light rain visible.
-    """
-    if block <= 1:
-        return
-    for model in models:
-        for date in dates:
-            hourly = values[model]["precipitation"][date]
-            n = len(hourly)
-            out = []
-            for h in range(n):
-                start = (h // block) * block
-                end = min(start + block, n)
-                stack = np.stack(hourly[start:end], axis=0)
-                # nansum so missing hours don't wipe a whole block
-                summed = np.nansum(stack, axis=0)
-                # if every hour was NaN, keep NaN
-                all_nan = np.all(~np.isfinite(stack), axis=0)
-                summed = np.where(all_nan, np.nan, summed)
-                out.append(summed)
-            values[model]["precipitation"][date] = out
+def trailing_sum(p, window):
+    """Trailing N-hour sum along axis 0 (partial windows at the start)."""
+    fin = np.isfinite(p)
+    c = np.cumsum(np.where(fin, p, 0.0), axis=0, dtype=np.float64)
+    out = c.copy()
+    out[window:] = c[window:] - c[:-window]
+    return np.where(fin, out, np.nan).astype(np.float32)
 
 
-def compute_ranges(values, models, variables, dates):
-    """Per-hour color scales, shared across all models.
-
-    Fixed-scale variables (cloud, PoP, RH) keep their 0–100 meta limits.
-    Auto-scaled variables (temp, feels-like, precip, wind, solar) use the
-    min/max across *all models* for that specific date+hour only, so each
-    hour's maps use the full colormap and show more spatial nuance instead
-    of being crushed into a narrow band of a multi-day global range.
-    """
-    ranges = {v: {d: [None] * 24 for d in dates} for v in variables}
-    for var in variables:
-        meta = VAR_META[var]
-        fixed_vmin = meta["vmin"]
-        fixed_vmax = meta["vmax"]
-        for date in dates:
-            for h in range(24):
-                if fixed_vmin is not None and fixed_vmax is not None:
-                    ranges[var][date][h] = (float(fixed_vmin), float(fixed_vmax))
-                    continue
-                mn, mx = np.inf, -np.inf
-                for model in models:
-                    arr = values[model][var][date][h]
-                    valid = arr[np.isfinite(arr)]
-                    if len(valid):
-                        mn = min(mn, float(valid.min()))
-                        mx = max(mx, float(valid.max()))
-                if not np.isfinite(mn):
-                    mn, mx = 0.0, 1.0
-                vmin = float(fixed_vmin) if fixed_vmin is not None else mn
-                vmax = float(fixed_vmax) if fixed_vmax is not None else mx
-                # Small pad so extrema aren't stuck on the colorbar edge
-                if vmax > vmin:
-                    pad = (vmax - vmin) * 0.04
-                    if fixed_vmin is None:
-                        vmin -= pad
-                    if fixed_vmax is None:
-                        vmax += pad
-                if vmax <= vmin:
-                    vmax = vmin + 1.0
-                if var == "precipitation":
-                    # Headroom + floor (mm) so light rain still uses color
-                    vmax = max(vmax * 1.1, 4.0)
-                    vmin = 0.0
-                if var == "shortwave_radiation":
-                    vmin = 0.0
-                    vmax = max(vmax, 50.0)
-                if var == "wind_speed_10m":
-                    vmin = 0.0
-                ranges[var][date][h] = (float(vmin), float(vmax))
-    return ranges
+def add_derived(arrs, models):
+    for m in models:
+        a = arrs[m]
+        a["precip_3h"] = trailing_sum(a["precipitation"], 3)
+        spd = a["wind_speed_10m"]
+        rad = np.deg2rad(a["wind_direction_10m"])
+        # meteorological convention: direction the wind blows FROM
+        a["wind_u"] = (-spd * np.sin(rad)).astype(np.float32)
+        a["wind_v"] = (-spd * np.cos(rad)).astype(np.float32)
 
 
-# ── Precomputed geometry (built once, reused for every image) ─────────────
-
-def precompute_geometry(lats, lons, texas_paths, factor=UPSAMPLE_FACTOR):
-    """Compute the upsampled lat/lon mesh and the boolean Texas mask a
-    single time. These never change between images since they only depend
-    on the fixed grid + state boundary, not on the weather values.
-
-    contains_points(radius=...) slightly expands the polygon so grid cells
-    that only graze the official boundary still count as inside — reduces
-    hairline gaps along the outline after upsampling.
-    """
-    nlat_up = (len(lats) - 1) * factor + 1
-    nlon_up = (len(lons) - 1) * factor + 1
-    lat_up = np.linspace(lats[0], lats[-1], nlat_up)
-    lon_up = np.linspace(lons[0], lons[-1], nlon_up)
-    Lon, Lat = np.meshgrid(lon_up, lat_up)
-
-    # ~quarter of a source cell in degrees — enough to seal edges, not spill
-    edge_radius = max(SPACING, 0.5) * 0.35
-
-    mask = np.zeros(Lon.shape, dtype=bool)
-    pts = np.column_stack([Lon.ravel(), Lat.ravel()])
-    for p in texas_paths:
-        mask |= p.contains_points(pts, radius=edge_radius).reshape(Lon.shape)
-
-    # Also build a coarse-grid mask (same shape as the original field) so
-    # H/L extrema can be restricted to cells that fall inside Texas.
-    Lon_c, Lat_c = np.meshgrid(lons, lats)
-    coarse_mask = np.zeros(Lon_c.shape, dtype=bool)
-    pts_c = np.column_stack([Lon_c.ravel(), Lat_c.ravel()])
-    for p in texas_paths:
-        coarse_mask |= p.contains_points(pts_c, radius=edge_radius).reshape(Lon_c.shape)
-
-    return {
-        "Lon": Lon, "Lat": Lat, "mask": mask, "factor": factor,
-        "coarse_mask": coarse_mask,
-    }
-
-
-def fill_inside_mask(field, mask):
-    """Nearest-neighbor fill for any NaN cells that still fall inside Texas.
-
-    After upsampling + masking, a few border pixels can remain empty when the
-    source grid is coarse relative to the coastline/panhandle. Pull values
-    from the nearest valid cell so the fill meets the black outline.
-    """
+def _spatial_fill(a):
+    """Nearest-valid-cell fill, slice by slice (a: T, nlat, nlon)."""
     from scipy.ndimage import distance_transform_edt
-
-    out = np.array(field, dtype=float, copy=True)
-    inside_hole = mask & ~np.isfinite(out)
-    if not np.any(inside_hole):
-        return out
-    valid = np.isfinite(out)
-    if not np.any(valid):
-        return out
-    # indices of nearest valid cell for every pixel
-    _, (iy, ix) = distance_transform_edt(~valid, return_indices=True)
-    filled = out[iy, ix]
-    out[inside_hole] = filled[inside_hole]
-    # Anything outside the state stays NaN for plotting
-    out = np.where(mask, out, np.nan)
+    out = a.copy()
+    for t in range(out.shape[0]):
+        sl = out[t]
+        bad = ~np.isfinite(sl)
+        if not bad.any() or bad.all():
+            continue
+        idx = distance_transform_edt(bad, return_distances=False, return_indices=True)
+        out[t] = sl[tuple(idx)]
     return out
 
 
-def upsample_field(field, target_shape, sigma=SMOOTH_SIGMA):
-    """Upsample the coarse data grid onto the precomputed high-res mesh.
+def clean_arrays(arrs, models, variables):
+    """Fill gaps so the GPU never sees NaN, and report what is truly missing.
 
-    Uses cubic-spline zoom for smooth curves through grid points. A *light*
-    Gaussian (SMOOTH_SIGMA) removes spline ringing without the heavy blur
-    that made earlier versions look soft/mushy. Set SMOOTH_SIGMA=0 for
-    maximum edge sharpness (more Tropical Tidbits–like).
+    * A (model, var) with almost no finite data is reported as *missing*; the
+      viewer shows "not provided by this model" instead of a fake map.
+    * Isolated gaps borrow the multi-model mean, then the nearest valid cell.
     """
-    from scipy.ndimage import zoom, gaussian_filter
-    zy = target_shape[0] / field.shape[0]
-    zx = target_shape[1] / field.shape[1]
-    finite = np.isfinite(field)
-    fill_val = np.nanmean(field) if finite.any() else 0.0
-    filled = np.where(finite, field, fill_val)
-    up = zoom(filled, (zy, zx), order=3, mode="nearest")
-    if sigma and sigma > 0:
-        up = gaussian_filter(up, sigma=sigma)
-    return up
+    missing = {m: [] for m in models}
+    for var in variables:
+        ok = []
+        for m in models:
+            if np.isfinite(arrs[m][var]).mean() < 0.02:
+                missing[m].append(var)
+                arrs[m][var] = np.zeros_like(arrs[m][var])
+            else:
+                ok.append(m)
+        if not ok:
+            continue
+        fallback = None
+        if len(ok) > 1:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                fallback = np.nanmean(np.stack([arrs[m][var] for m in ok]), axis=0)
+        for m in ok:
+            a = arrs[m][var]
+            if not np.isfinite(a).all():
+                if fallback is not None:
+                    a = np.where(np.isfinite(a), a, fallback)
+                if not np.isfinite(a).all():
+                    a = _spatial_fill(a)
+                a = np.nan_to_num(a, nan=0.0)
+            arrs[m][var] = a.astype(np.float32)
+    return missing
 
 
-def _contour_levels(var, vmin, vmax):
-    """Discrete levels tuned for a Tropical Tidbits–style filled contour look."""
-    if var in ("temperature_2m", "apparent_temperature"):
-        # ~2–3 °F steps across the observed range
-        step = 2.0 if (vmax - vmin) < 40 else 3.0
-        lo = math.floor(vmin / step) * step
-        hi = math.ceil(vmax / step) * step
-        return np.arange(lo, hi + step * 0.5, step)
-    if var == "cloud_cover":
-        return np.arange(0, 101, 10)
-    if var == "precipitation_probability":
-        return np.arange(0, 101, 10)
-    if var == "relative_humidity_2m":
-        return np.arange(0, 101, 10)
-    if var == "precipitation":
-        # mm thresholds, denser at the low end so light/moderate rain (the
-        # most common case) still shows real contrast instead of a single
-        # flat "any rain" color.
-        base = [0.0, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0,
-                10.0, 15.0, 20.0, 30.0, 40.0, 60.0, 80.0]
-        levels = [x for x in base if x <= vmax * 1.05]
-        if not levels or levels[-1] < vmax:
-            levels.append(max(vmax, (levels[-1] if levels else 0) + 5.0))
-        return np.array(levels, dtype=float)
-    if var == "wind_speed_10m":
-        # Finer steps than before so the map shows the same granularity the
-        # click-probe already reveals underneath.
-        rng = vmax - vmin
-        step = 1.0 if rng <= 15 else 2.0 if rng <= 30 else 3.0
-        lo = 0.0
-        hi = math.ceil(vmax / step) * step
-        return np.arange(lo, hi + step * 0.5, step)
-    if var == "shortwave_radiation":
-        # W/m² — typical daytime peaks ~800–1100
-        step = 50.0 if vmax <= 600 else 100.0
-        lo = 0.0
-        hi = math.ceil(max(vmax, 50) / step) * step
-        return np.arange(lo, hi + step * 0.5, step)
-    # Fallback
-    return np.linspace(vmin, vmax, 12)
+def quantize(a, lo, hi):
+    q = np.clip((a - lo) / (hi - lo), 0.0, 1.0) * 65535.0
+    return np.rint(q).astype("<u2")
 
 
-def _select_extrema(field, mask, lats, lons, n=HL_COUNT, mode="max",
-                     min_sep_deg=HL_MIN_SEP_DEG):
-    """Pick up to n (lat, lon, value) points that are local extrema and
-    spread out across the state, instead of just the single global max/min.
+def export_grid_data(out_dir, arrs, models, enc_vars):
+    """One base64 blob, layout: [model][var][time][lat][lon] as uint16 LE."""
+    chunks = []
+    for m in models:
+        for v in enc_vars:
+            lo, hi = QUANT[v]
+            chunks.append(np.ascontiguousarray(quantize(arrs[m][v], lo, hi)).tobytes())
+    blob = b"".join(chunks)
+    path = out_dir / "grid_data.js"
+    path.write_text('window.GRID_B64="' + base64.b64encode(blob).decode("ascii") + '";',
+                    encoding="ascii")
+    print(f"  Wrote {path.name} ({path.stat().st_size / 1048576:.1f} MB)")
 
-    Greedily walks the sorted valid values and keeps a candidate only if
-    it's at least min_sep_deg (in both lat and lon) away from every point
-    already picked, so 3 highs/lows don't all land on the same hot spot.
-    """
-    Lon_c, Lat_c = np.meshgrid(lons, lats)
-    valid = mask & np.isfinite(field)
-    if not np.any(valid):
+
+# ── Base map (Natural Earth land + Census state borders) ─────────────────
+
+def _flat_ring(coords):
+    flat, last = [], None
+    for c in coords:
+        p = (round(float(c[0]), 3), round(float(c[1]), 3))
+        if p != last:
+            flat.extend(p)
+            last = p
+    return flat
+
+
+def _geometry_rings(geom):
+    if not geom:
         return []
-    vals = field[valid]
-    las = Lat_c[valid]
-    los = Lon_c[valid]
-    order = np.argsort(-vals) if mode == "max" else np.argsort(vals)
-
-    selected = []
-    for idx in order:
-        la, lo, v = float(las[idx]), float(los[idx]), float(vals[idx])
-        if all(abs(la - sla) >= min_sep_deg or abs(lo - slo) >= min_sep_deg
-               for sla, slo, _ in selected):
-            selected.append((la, lo, v))
-        if len(selected) >= n:
-            break
-    return selected
-
-
-# ── Rendering ───────────────────────────────────────────────────────────
-
-def render_image(field, lats, lons, texas_paths, var, model_label, date, hour,
-                  vmin, vmax, cities, value_only_cities, geometry, dpi=130,
-                  figsize=(7.2, 6.2)):
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    ax.set_xlim(TEXAS_BOUNDS["min_lon"], TEXAS_BOUNDS["max_lon"])
-    ax.set_ylim(TEXAS_BOUNDS["min_lat"], TEXAS_BOUNDS["max_lat"])
-    ax.set_aspect("equal")
-    ax.axis("off")
-
-    if var == "cloud_cover":
-        ax.set_facecolor("#1a4a7a")
+    if geom["type"] == "Polygon":
+        polys = [geom["coordinates"]]
+    elif geom["type"] == "MultiPolygon":
+        polys = geom["coordinates"]
     else:
-        ax.set_facecolor("#dce5eb")
+        return []
+    return [ring for poly in polys for ring in poly]
 
-    Lon, Lat = geometry["Lon"], geometry["Lat"]
-    coarse_mask = geometry["coarse_mask"]
-    # Full rectangular frame is filled (OK, NM, LA, Gulf, Mexico, etc. visible
-    # outside the Texas outline). Outline is drawn on top for context.
-    field_up = upsample_field(field, Lon.shape)
-    field_masked = field_up
 
-    if var == "cloud_cover":
-        cmap = mcolors.LinearSegmentedColormap.from_list(
-            "clouds", ["#1a4a7a", "#8eb4d9", "#ffffff"], N=256
-        )
-    elif var == "wind_speed_10m":
-        # Blue (calm) -> teal -> green (windy), with enough stops for a
-        # smooth ramp once it's cut into fine contour levels.
-        cmap = mcolors.LinearSegmentedColormap.from_list(
-            "wind_bg",
-            ["#08306b", "#2166ac", "#4393c3", "#66c2a4", "#238b45", "#00441b"],
-            N=256,
-        )
-    else:
-        cmap = plt.get_cmap(VAR_META[var]["cmap"])
+def _clip_ring(ring, xmin, ymin, xmax, ymax):
+    """Sutherland–Hodgman clip of one ring to a rectangle."""
+    def clip_edge(pts, inside, intersect):
+        out = []
+        if not pts:
+            return out
+        prev = pts[-1]
+        for cur in pts:
+            if inside(cur):
+                if not inside(prev):
+                    out.append(intersect(prev, cur))
+                out.append(cur)
+            elif inside(prev):
+                out.append(intersect(prev, cur))
+            prev = cur
+        return out
 
-    if USE_FILLED_CONTOURS:
-        # Tropical Tidbits–style: discrete filled contours + thin isopleths.
-        # Contourf is sharper than heavily-blurred pcolormesh and matches
-        # operational model-guidance pages more closely.
-        levels = _contour_levels(var, vmin, vmax)
-        # Avoid all-NaN / flat fields crashing contourf
-        finite = field_masked[np.isfinite(field_masked)]
-        if len(finite) and np.nanmax(finite) > np.nanmin(finite):
-            # Ensure levels span the data a bit
-            if levels[0] > np.nanmin(finite):
-                levels = np.concatenate([[np.nanmin(finite) - 1e-6], levels])
-            if levels[-1] < np.nanmax(finite):
-                levels = np.concatenate([levels, [np.nanmax(finite) + 1e-6]])
-            levels = np.unique(levels)
-            cf = ax.contourf(
-                Lon, Lat, field_masked, levels=levels, cmap=cmap,
-                vmin=vmin, vmax=vmax, extend="both", zorder=1,
-            )
-            if CONTOUR_LINE_WIDTH and CONTOUR_LINE_WIDTH > 0:
-                ax.contour(
-                    Lon, Lat, field_masked, levels=levels,
-                    colors="#222222", linewidths=CONTOUR_LINE_WIDTH,
-                    alpha=0.55, zorder=2,
-                )
-        else:
-            ax.pcolormesh(Lon, Lat, field_masked, cmap=cmap, vmin=vmin, vmax=vmax,
-                          shading="nearest", zorder=1)
-    else:
-        # Continuous shaded look (legacy). Keep light power stretch on precip.
-        if var == "precipitation":
-            field_disp = np.where(
-                field_masked > 0,
-                np.power(np.clip(field_masked / max(vmax, 0.05), 0, 1), 0.45) * vmax,
-                field_masked
-            )
-        else:
-            field_disp = field_masked
-        ax.pcolormesh(Lon, Lat, field_disp, cmap=cmap, vmin=vmin, vmax=vmax,
-                      shading="gouraud", zorder=1)
+    def ix(x):
+        return lambda a, b: (x, a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]))
 
-    for p in texas_paths:
-        patch = PathPatch(p, facecolor="none", edgecolor="#111", lw=1.3, zorder=5)
-        ax.add_patch(patch)
+    def iy(y):
+        return lambda a, b: (a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]), y)
 
-    def _sample(clat, clon):
-        i = np.argmin(np.abs(lats - clat))
-        j = np.argmin(np.abs(lons - clon))
-        return field[i, j]
+    pts = [(p[0], p[1]) for p in ring]
+    pts = clip_edge(pts, lambda p: p[0] >= xmin, ix(xmin))
+    pts = clip_edge(pts, lambda p: p[0] <= xmax, ix(xmax))
+    pts = clip_edge(pts, lambda p: p[1] >= ymin, iy(ymin))
+    pts = clip_edge(pts, lambda p: p[1] <= ymax, iy(ymax))
+    return pts
 
-    def _fmt(val):
-        if var == "precipitation":
-            return f"{val:.1f}"
-        return f"{val:.0f}"
 
-    # Named cities: name + value, with optional inward offset for border cities
-    for name, clat, clon in cities:
-        val = _sample(clat, clon)
-        if not np.isfinite(val):
+def _clipped_flat_rings(rings, window):
+    xmin, ymin, xmax, ymax = window
+    out = []
+    for ring in rings:
+        xs = [p[0] for p in ring]
+        ys = [p[1] for p in ring]
+        if max(xs) < xmin or min(xs) > xmax or max(ys) < ymin or min(ys) > ymax:
             continue
-        dlon, dlat = CITY_LABEL_OFFSETS.get(name, (0.0, 0.0))
-        tlon, tlat = clon + dlon, clat + dlat
-        ax.plot(clon, clat, "o", color="white", markersize=3.5,
-                markeredgecolor="#111", markeredgewidth=0.6, zorder=6)
-        ax.text(tlon, tlat + 0.22, name, fontsize=6.5, ha="center", va="bottom",
-                color="#111", fontweight="normal", zorder=7)
-        ax.text(tlon, tlat - 0.18, _fmt(val), fontsize=7, ha="center", va="top",
-                color="#111", fontweight="bold", zorder=7)
-
-    # Value-only cities (no name)
-    for name, clat, clon in value_only_cities:
-        val = _sample(clat, clon)
-        if not np.isfinite(val):
-            continue
-        ax.plot(clon, clat, "o", color="white", markersize=3.0,
-                markeredgecolor="#111", markeredgewidth=0.5, zorder=6)
-        ax.text(clon, clat - 0.18, _fmt(val), fontsize=6.5, ha="center", va="top",
-                color="#111", fontweight="bold", zorder=7)
-
-    # Highs / lows: top-N / bottom-N distinct points restricted to cells
-    # inside the Texas boundary (skip for precip probability — 0/100 noise).
-    if var not in ("precipitation_probability",):
-        highs = _select_extrema(field, coarse_mask, lats, lons, mode="max")
-        lows = _select_extrema(field, coarse_mask, lats, lons, mode="min")
-        for la, lo, v in highs:
-            ax.text(lo, la, f"H {_fmt(v)}",
-                    fontsize=8, fontweight="bold", color="#111", ha="center", zorder=8)
-        for la, lo, v in lows:
-            ax.text(lo, la, f"L {_fmt(v)}",
-                    fontsize=8, fontweight="bold", color="#111", ha="center", zorder=8)
-
-    ax.text(0.02, 0.97, model_label, transform=ax.transAxes,
-            fontsize=10, fontweight="bold", color="#111",
-            va="top", ha="left", zorder=10,
-            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="none", alpha=0.85))
-
-    # Fixed layout instead of bbox_inches="tight" (which forces an extra,
-    # expensive renderer pass on every single save call).
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=dpi)
-    plt.close(fig)
-    buf.seek(0)
-    return Image.open(buf)
+        clipped = _clip_ring(ring, xmin, ymin, xmax, ymax)
+        if len(clipped) >= 3:
+            out.append(_flat_ring(clipped))
+    return out
 
 
-# ── Worker for parallel rendering ──────────────────────────────────────
-# Module-level globals populated via ProcessPoolExecutor initializer so
-# large, read-only data (lats/lons/paths/geometry) is set up once per
-# worker process instead of being re-pickled with every single task.
-
-_W = {}
-
-
-def _init_worker(lats, lons, texas_paths, geometry, cities, value_only_cities, dpi):
-    _W["lats"] = lats
-    _W["lons"] = lons
-    _W["texas_paths"] = texas_paths
-    _W["geometry"] = geometry
-    _W["cities"] = cities
-    _W["value_only_cities"] = value_only_cities
-    _W["dpi"] = dpi
+def _tiger_features(where, offset=None):
+    params = {"where": where, "outFields": "STATE", "returnGeometry": "true",
+              "f": "geojson", "outSR": "4326"}
+    if offset:
+        params["maxAllowableOffset"] = offset
+    r = requests.get(TIGER_URL, params=params, timeout=60)
+    r.raise_for_status()
+    return r.json()["features"]
 
 
-def _render_task(task):
-    field, var, model_label, date, hour, vmin, vmax, fname = task
-    img = render_image(
-        field, _W["lats"], _W["lons"], _W["texas_paths"], var, model_label,
-        date, hour, vmin, vmax, _W["cities"], _W["value_only_cities"],
-        _W["geometry"], dpi=_W["dpi"]
-    )
-    img.save(fname)
-    return fname
+def load_basemap():
+    b = TEXAS_BOUNDS
+    key = {"bounds": b, "pad": BASEMAP_PAD_DEG, "v": 1}
+    if BASEMAP_CACHE.exists():
+        try:
+            cached = json.loads(BASEMAP_CACHE.read_text())
+            age_days = (time.time() - BASEMAP_CACHE.stat().st_mtime) / 86400
+            if cached.get("key") == key and age_days < BASEMAP_MAX_AGE_DAYS:
+                print("  base map: using cache")
+                return cached["data"]
+        except Exception:
+            pass
 
+    window = (b["min_lon"] - BASEMAP_PAD_DEG, b["min_lat"] - BASEMAP_PAD_DEG,
+              b["max_lon"] + BASEMAP_PAD_DEG, b["max_lat"] + BASEMAP_PAD_DEG)
+    all_ok = True
+
+    try:
+        feats = _tiger_features("STATE='48'", offset=0.004)
+        texas = [_flat_ring(r) for f in feats for r in _geometry_rings(f["geometry"])]
+        if not texas:
+            raise ValueError("empty Texas geometry")
+    except Exception as e:
+        print(f"[warn] Texas boundary download failed: {e} — using bounding box")
+        all_ok = False
+        texas = [[b["min_lon"], b["min_lat"], b["max_lon"], b["min_lat"],
+                  b["max_lon"], b["max_lat"], b["min_lon"], b["max_lat"],
+                  b["min_lon"], b["min_lat"]]]
+
+    try:
+        feats = _tiger_features("STATE IN ('40','35','22','05')", offset=0.01)
+        rings = [r for f in feats for r in _geometry_rings(f["geometry"])]
+        states = _clipped_flat_rings(rings, window)
+    except Exception as e:
+        print(f"[warn] Neighbour-state download failed: {e}")
+        all_ok = False
+        states = []
+
+    try:
+        r = requests.get(NE_LAND_URL, timeout=90)
+        r.raise_for_status()
+        rings = [ring for f in r.json()["features"] for ring in _geometry_rings(f["geometry"])]
+        land = _clipped_flat_rings(rings, window)
+    except Exception as e:
+        print(f"[warn] Land polygons download failed: {e} — plain background")
+        all_ok = False
+        land = []
+
+    data = {"texas": texas, "states": states, "land": land}
+    if all_ok:
+        try:
+            BASEMAP_CACHE.write_text(json.dumps({"key": key, "data": data}))
+        except Exception:
+            pass
+    return data
+
+
+def points_in_rings(px, py, rings):
+    """Vectorised even-odd point-in-polygon over many rings."""
+    inside = np.zeros(px.shape, dtype=bool)
+    for ring in rings:
+        x0, y0 = ring[:, 0], ring[:, 1]
+        x1, y1 = np.roll(x0, -1), np.roll(y0, -1)
+        for xa, ya, xb, yb in zip(x0, y0, x1, y1):
+            if ya == yb:
+                continue
+            cond = (ya > py) != (yb > py)
+            if not cond.any():
+                continue
+            xint = xa + (py - ya) * (xb - xa) / (yb - ya)
+            inside ^= cond & (px < xint)
+    return inside
+
+
+def compute_inside_mask(lats, lons, texas_rings, spacing):
+    """Grid cells inside Texas (used for H/L). A small tolerance keeps coastal
+    and border cells whose centre grazes the outline."""
+    LON, LAT = np.meshgrid(lons, lats)
+    px, py = LON.ravel(), LAT.ravel()
+    r = 0.35 * max(spacing, 0.5)
+    offs = [(0, 0), (r, 0), (-r, 0), (0, r), (0, -r)]
+    ax = np.concatenate([px + dx for dx, _ in offs])
+    ay = np.concatenate([py + dy for _, dy in offs])
+    inside = points_in_rings(ax, ay, texas_rings).reshape(len(offs), -1).any(axis=0)
+    return inside.reshape(LON.shape)
+
+
+# ── Synthetic data (TX_DEMO=1) ────────────────────────────────────────────
+
+def make_demo_data(lats, lons, models):
+    now = datetime.now(ZoneInfo(TIMEZONE)).replace(tzinfo=None)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    times = pd.date_range(start, periods=24 * FORECAST_DAYS, freq="h")
+    T = len(times)
+    LA, LO = np.meshgrid(lats, lons, indexing="ij")
+    hrs = np.arange(T)
+    tt = hrs[:, None, None].astype(float)
+    h = (hrs % 24)[:, None, None].astype(float)
+    out = {m: {} for m in models}
+    for mi, m in enumerate(models):
+        ph = 0.35 * mi
+        temp = 82 - 2.0 * (LA - 25.7) + 5 * np.sin((LO + 100) / 2.2 + ph) \
+            + 14 * np.sin((h - 9) / 24 * 2 * np.pi)
+        cloud = np.clip(45 + 45 * np.sin(LO / 1.7 + LA / 2.3 + tt / 7 + ph), 0, 100)
+        precip = np.maximum(0, np.sin(LO * 1.1 + tt * 0.12 + ph) * np.cos(LA * 1.3 - tt * 0.05) - 0.55) * 14
+        pop = np.clip(precip * 35 + 1.5 * np.abs(np.sin(LO * 3 + LA * 2)), 0, 100)
+        spd = np.clip(9 + 7 * np.sin(LA * 0.9 + tt / 6 + ph) + 4 * np.cos(LO * 0.7), 0, None)
+        wdir = (190 + 70 * np.sin(LO / 2.5 + ph) + 40 * np.cos(LA / 2 + tt / 9)) % 360
+        rh = np.clip(65 + 25 * np.cos(LO / 2 + ph) - 15 * np.sin((h - 15) / 24 * 2 * np.pi), 5, 100)
+        solar = np.maximum(0, 950 * np.sin(np.pi * (h - 6.5) / 13)) * (1 - cloud / 130)
+        pres = 1014 + 7 * np.sin(LO / 3 + tt / 24 + ph) + 5 * np.cos(LA / 2.5)
+        app = temp + 0.05 * (rh - 50) - 0.1 * spd
+        d = {
+            "temperature_2m": temp, "apparent_temperature": app, "cloud_cover": cloud,
+            "precipitation_probability": pop, "precipitation": precip,
+            "wind_speed_10m": spd, "wind_direction_10m": wdir,
+            "relative_humidity_2m": rh, "shortwave_radiation": solar, "pressure_msl": pres,
+        }
+        for k, v in d.items():
+            out[m][k] = np.broadcast_to(v, (T, len(lats), len(lons))).astype(np.float32).copy()
+    # Exercise the "model doesn't provide this variable" path.
+    out[models[1]]["precipitation_probability"][:] = np.nan
+    return out, times
+
+
+# ── HTML viewer ───────────────────────────────────────────────────────────
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -829,103 +696,82 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-             font-family: Segoe UI, Arial, sans-serif; overflow: hidden; }
+             font-family: "Segoe UI", system-ui, Arial, sans-serif; overflow: hidden; }
+body { display: flex; flex-direction: column; }
 header {
-  height: 56px; display: flex; align-items: center; justify-content: space-between;
+  flex: none; height: 52px; display: flex; align-items: center; justify-content: space-between;
   padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--border);
 }
 .title { font-size: 17px; font-weight: 650; }
 .subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .controls {
-  height: 58px; display: flex; align-items: center; gap: 14px;
-  padding: 0 18px; background: #151e29; border-bottom: 1px solid var(--border);
+  flex: none; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 14px;
+  padding: 8px 18px; background: #151e29; border-bottom: 1px solid var(--border);
 }
-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.controls > div { display: flex; flex-direction: column; gap: 3px; }
+label.lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 select, button {
   background: #1a2430; color: var(--text); border: 1px solid #334253;
-  border-radius: 5px; padding: 6px 11px; font-size: 12px; cursor: pointer;
+  border-radius: 5px; padding: 6px 11px; font-size: 12px; cursor: pointer; font-family: inherit;
 }
-button:hover { border-color: var(--accent); }
+button:hover, select:hover { border-color: var(--accent); }
+select:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#modelSelects { display: flex !important; flex-direction: row !important; align-items: flex-end; gap: 10px; }
+.model-select-wrap { display: flex; flex-direction: column; gap: 3px; }
+.model-select-wrap.hidden { display: none; }
+.model-select-wrap select:disabled { opacity: 0.7; cursor: not-allowed; }
+.toggles { display: flex !important; flex-direction: row !important; gap: 12px; align-items: center; height: 30px; }
+.toggles label { font-size: 12px; color: var(--text); display: flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.toggles input { accent-color: var(--accent); margin: 0; }
+#opacityRange { width: 90px; accent-color: var(--accent); }
+#probeHint { font-size: 11px; color: var(--muted); align-self: center; }
+
 #maps {
-  height: calc(100vh - 56px - 58px - 78px);
-  display: grid;
-  gap: 3px; background: #1c252f; padding: 3px;
+  flex: 1; min-height: 0; display: grid; gap: 3px; background: #1c252f; padding: 3px;
 }
-#maps.layout-1 {
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr;
-}
-
-#maps.layout-2 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr;
-}
-
-#maps.layout-3 {
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: 1fr;
-}
-
-#maps.layout-4 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-}
+#maps.layout-1 { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr); }
+#maps.layout-2 { grid-template-columns: repeat(2, minmax(0,1fr)); grid-template-rows: minmax(0,1fr); }
+#maps.layout-3 { grid-template-columns: repeat(3, minmax(0,1fr)); grid-template-rows: minmax(0,1fr); }
+#maps.layout-4 { grid-template-columns: repeat(2, minmax(0,1fr)); grid-template-rows: repeat(2, minmax(0,1fr)); }
 .panel {
-  position: relative; background: #0d131a; overflow: hidden;
+  position: relative; background: #0d131a; overflow: hidden; min-width: 0; min-height: 0;
   display: flex; align-items: center; justify-content: center;
 }
 .panel.hidden { display: none; }
-.panel img {
-  max-width: 100%; max-height: 100%; object-fit: contain;
-  display: block; cursor: crosshair;
+.mapbox { position: relative; flex: none; cursor: crosshair; }
+.mapbox canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+
+.legend {
+  flex: none; height: 44px; padding: 4px 18px 0; background: var(--panel);
+  border-top: 1px solid var(--border); display: flex; align-items: center; gap: 14px;
 }
+#legendLabel { font-size: 12px; color: var(--muted); min-width: 150px; white-space: nowrap; }
+#legend { flex: 1; height: 36px; max-width: 900px; display: block; }
 .timeline {
-  height: 78px; padding: 8px 18px; background: var(--panel);
-  border-top: 1px solid var(--border);
-  display: flex; flex-direction: column; gap: 4px;
+  flex: none; height: 78px; padding: 8px 18px; background: var(--panel);
+  border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px;
 }
 #timeLabel { font-size: 13px; font-variant-numeric: tabular-nums; }
-.slider-wrap { width: 100%; }
-input[type=range] {
-  width: 100%; accent-color: var(--accent);
-  margin: 0; display: block;
-}
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display: block; }
 .hour-ticks {
   display: flex; justify-content: space-between; color: var(--muted);
-  font-size: 9px; margin-top: 2px;
-  /* Match typical range thumb inset so labels sit under the track, not the ends */
-  padding: 0 10px 0 14px;
-  box-sizing: border-box;
+  font-size: 9px; margin-top: 2px; padding: 0 10px 0 14px; box-sizing: border-box;
 }
 .hour-ticks span { min-width: 2.4em; text-align: center; }
-/* Click-to-inspect popup */
 #probe {
-  display: none; position: fixed; z-index: 50; min-width: 200px; max-width: 280px;
+  display: none; position: fixed; z-index: 50; min-width: 210px; max-width: 290px;
   background: rgba(17, 24, 33, 0.96); border: 1px solid var(--border);
   border-radius: 8px; padding: 10px 12px; pointer-events: none;
   box-shadow: 0 8px 28px rgba(0,0,0,0.45); font-size: 12px;
 }
-#probe .probe-title {
-  font-weight: 650; font-size: 12px; margin-bottom: 2px; color: var(--accent);
-}
-#probe .probe-loc {
-  color: var(--muted); font-size: 10px; margin-bottom: 8px;
-  font-variant-numeric: tabular-nums;
-}
+#probe .probe-title { font-weight: 650; font-size: 12px; margin-bottom: 2px; color: var(--accent); }
+#probe .probe-loc { color: var(--muted); font-size: 10px; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
 #probe table { width: 100%; border-collapse: collapse; }
 #probe td { padding: 2px 0; }
 #probe td.k { color: var(--muted); padding-right: 10px; }
 #probe td.v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-#probeHint {
-  font-size: 11px; color: var(--muted); margin-left: 8px;
-}
-#modelSelects {
-  display: flex; align-items: flex-end; gap: 10px;
-}
-.model-select-wrap.hidden { display: none; }
-.model-select-wrap select:disabled {
-  opacity: 0.7; cursor: not-allowed;
-}
+#fatal { display: none; position: fixed; inset: 0; z-index: 100; background: rgba(11,15,20,.96);
+        align-items: center; justify-content: center; text-align: center; padding: 30px; font-size: 14px; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -934,22 +780,14 @@ input[type=range] {
     <div class="title">Texas Multi-Model Weather Viewer</div>
     <div class="subtitle" id="subtitle"></div>
   </div>
-  <div style="display:flex; align-items:center; gap:14px;">
-    <div id="lastUpdated" style="font-size:11px; color:var(--muted);"></div>
-  </div>
+  <div id="lastUpdated" style="font-size:11px; color:var(--muted);"></div>
 </header>
 
 <div class="controls">
+  <div><label class="lbl" for="dateSelect">Date</label><select id="dateSelect"></select></div>
+  <div><label class="lbl" for="varSelect">Variable</label><select id="varSelect"></select></div>
   <div>
-    <label>Date</label><br>
-    <select id="dateSelect"></select>
-  </div>
-  <div>
-    <label>Variable</label><br>
-    <select id="varSelect"></select>
-  </div>
-  <div>
-    <label>Layout</label><br>
+    <label class="lbl" for="layoutSelect">Layout</label>
     <select id="layoutSelect">
       <option value="1">1 panel</option>
       <option value="2">2 panels</option>
@@ -958,38 +796,52 @@ input[type=range] {
     </select>
   </div>
   <div id="modelSelects">
-    <div class="model-select-wrap" id="modelWrap0">
-      <label>Model 1</label><br>
-      <select id="modelSelect0"></select>
-    </div>
-    <div class="model-select-wrap" id="modelWrap1">
-      <label>Model 2</label><br>
-      <select id="modelSelect1"></select>
-    </div>
-    <div class="model-select-wrap" id="modelWrap2">
-      <label>Model 3</label><br>
-      <select id="modelSelect2"></select>
-    </div>
-    <div class="model-select-wrap" id="modelWrap3">
-      <label>Model 4</label><br>
-      <select id="modelSelect3"></select>
-    </div>
+    <div class="model-select-wrap" id="modelWrap0"><label class="lbl" for="modelSelect0">Model 1</label><select id="modelSelect0"></select></div>
+    <div class="model-select-wrap" id="modelWrap1"><label class="lbl" for="modelSelect1">Model 2</label><select id="modelSelect1"></select></div>
+    <div class="model-select-wrap" id="modelWrap2"><label class="lbl" for="modelSelect2">Model 3</label><select id="modelSelect2"></select></div>
+    <div class="model-select-wrap" id="modelWrap3"><label class="lbl" for="modelSelect3">Model 4</label><select id="modelSelect3"></select></div>
   </div>
-  <button id="playBtn">▶ Play</button>
+  <div>
+    <label class="lbl" for="outsideSelect">Outside Texas</label>
+    <select id="outsideSelect">
+      <option value="show">Show</option>
+      <option value="dim">Dim</option>
+      <option value="hide">Hide</option>
+    </select>
+  </div>
+  <div class="toggles">
+    <label><input type="checkbox" id="chkFlow" checked> Wind flow</label>
+    <label><input type="checkbox" id="chkIso"> Isobars</label>
+    <label><input type="checkbox" id="chkIsot"> Isotherms</label>
+    <label><input type="checkbox" id="chkCities" checked> Values</label>
+    <label><input type="checkbox" id="chkHL" checked> H/L</label>
+  </div>
+  <div><label class="lbl" for="opacityRange">Layer opacity</label><input type="range" id="opacityRange" min="20" max="100" value="85"></div>
+  <div>
+    <label class="lbl" for="speedSelect">Speed</label>
+    <select id="speedSelect">
+      <option value="0.7">Slow</option>
+      <option value="1.4" selected>Normal</option>
+      <option value="2.8">Fast</option>
+    </select>
+  </div>
+  <div><label class="lbl">&nbsp;</label><button id="playBtn">▶ Play</button></div>
   <span id="probeHint">Click a map to probe values</span>
 </div>
 
 <div id="maps" class="layout-4">
-  <div class="panel" id="panel0"><img id="img0" alt="model 0" data-model-idx="0"></div>
-  <div class="panel" id="panel1"><img id="img1" alt="model 1" data-model-idx="1"></div>
-  <div class="panel" id="panel2"><img id="img2" alt="model 2" data-model-idx="2"></div>
-  <div class="panel" id="panel3"><img id="img3" alt="model 3" data-model-idx="3"></div>
+  <div class="panel" id="panel0"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
+  <div class="panel" id="panel1"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
+  <div class="panel" id="panel2"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
+  <div class="panel" id="panel3"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
 </div>
+
+<div class="legend"><span id="legendLabel"></span><canvas id="legend"></canvas></div>
 
 <div class="timeline">
   <span id="timeLabel"></span>
-  <div class="slider-wrap">
-    <input type="range" id="hourSlider" min="0" max="23" value="12" step="1">
+  <div>
+    <input type="range" id="hourSlider" min="0" max="23" value="12" step="1" aria-label="Hour">
     <div class="hour-ticks">
       <span>HE 1</span><span>HE 7</span><span>HE 13</span><span>HE 19</span><span>HE 24</span>
     </div>
@@ -997,287 +849,682 @@ input[type=range] {
 </div>
 
 <div id="probe"></div>
+<div id="fatal"></div>
 
+<script src="grid_data.js"></script>
 <script>
+(function () {
+"use strict";
 const DATA = __DATA_JSON__;
-const BOUNDS = DATA.bounds;
 
-const dateSelect   = document.getElementById("dateSelect");
-const varSelect    = document.getElementById("varSelect");
-const layoutSelect = document.getElementById("layoutSelect");
-const hourSlider   = document.getElementById("hourSlider");
-const timeLabel    = document.getElementById("timeLabel");
-const playBtn      = document.getElementById("playBtn");
-const probeEl      = document.getElementById("probe");
-const mapsEl       = document.getElementById("maps");
-const panels       = [0,1,2,3].map(i => document.getElementById("panel"+i));
-const imgs         = [0,1,2,3].map(i => document.getElementById("img"+i));
-const modelSelects = [0,1,2,3].map(i => document.getElementById("modelSelect"+i));
-const modelWraps   = [0,1,2,3].map(i => document.getElementById("modelWrap"+i));
+/* ── constants & data ─────────────────────────────────────────────── */
+const B = DATA.bounds;
+const DLON = B.max_lon - B.min_lon, DLAT = B.max_lat - B.min_lat;
+const ASPECT = (DLON * Math.cos((B.min_lat + B.max_lat) / 2 * Math.PI / 180)) / DLAT;
+const NLAT = DATA.nlat, NLON = DATA.nlon, NCELL = NLAT * NLON;
+const T = DATA.times.length;
+const MODELS = DATA.models, DVARS = DATA.dataVars, VARS = DATA.variables;
+const META = DATA.varMeta, QUANT = DATA.quant, BASE = DATA.base;
+const MASK = Uint8Array.from(DATA.mask);
+const DVIDX = {}; DVARS.forEach((v, i) => DVIDX[v] = i);
+const FONT = '"Segoe UI", system-ui, Arial, sans-serif';
 
-let currentDate = DATA.dates[0];
-let currentVar  = DATA.variables[0];
-let currentHour = 12;
-let layoutCount = 4;
-// Which model appears in each panel (indices into DATA.models)
-let panelModels = DATA.models.slice();
-let playing = false;
-let timer = null;
-let GRID = null;  // loaded async from grid_data.js
-
-DATA.dates.forEach(d => {
-  const o = document.createElement("option");
-  o.value = d; o.textContent = d;
-  dateSelect.appendChild(o);
-});
-DATA.variables.forEach(v => {
-  const o = document.createElement("option");
-  o.value = v; o.textContent = DATA.varMeta[v].label;
-  varSelect.appendChild(o);
-});
-
-// Populate model dropdowns
-function modelLabel(m) {
-  return (DATA.modelLabels && DATA.modelLabels[m]) || m;
+function fatal(msg) {
+  const el = document.getElementById("fatal");
+  el.innerHTML = "<div>" + msg + "</div>"; el.style.display = "flex";
 }
-modelSelects.forEach((sel, idx) => {
-  DATA.models.forEach(m => {
-    const o = document.createElement("option");
-    o.value = m;
-    o.textContent = modelLabel(m);
-    sel.appendChild(o);
-  });
-  sel.value = DATA.models[idx];
-  sel.onchange = () => {
-    const chosen = sel.value;
-    const prev = panelModels[idx];
-    // If another visible panel already has this model, swap
-    for (let j = 0; j < layoutCount; j++) {
-      if (j !== idx && panelModels[j] === chosen) {
-        panelModels[j] = prev;
-        modelSelects[j].value = prev;
-        break;
+if (!window.GRID_B64) { fatal("Could not load <b>grid_data.js</b>. Keep it in the same folder as index.html."); return; }
+
+let U16;
+(function decode() {
+  const s = atob(window.GRID_B64);
+  const u8 = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i);
+  U16 = new Uint16Array(u8.buffer);
+  window.GRID_B64 = null;
+})();
+
+const $ = id => document.getElementById(id);
+const dateSelect = $("dateSelect"), varSelect = $("varSelect"), layoutSelect = $("layoutSelect");
+const hourSlider = $("hourSlider"), timeLabel = $("timeLabel"), playBtn = $("playBtn");
+const probeEl = $("probe"), mapsEl = $("maps"), legendCv = $("legend"), legendLabel = $("legendLabel");
+const speedSelect = $("speedSelect"), outsideSelect = $("outsideSelect"), opacityRange = $("opacityRange");
+const modelSelects = [0,1,2,3].map(i => $("modelSelect" + i));
+const modelWraps = [0,1,2,3].map(i => $("modelWrap" + i));
+
+/* timeline */
+const dates = [], dayIdx = {}, DATE_OF = [], HOUR_OF = [];
+DATA.times.forEach((s, t) => {
+  const d = s.slice(0, 10);
+  if (!(d in dayIdx)) { dayIdx[d] = []; dates.push(d); }
+  dayIdx[d].push(t); DATE_OF.push(d); HOUR_OF.push(+s.slice(11, 13));
+});
+
+/* state */
+let currentVar = VARS[0], tPos = 0, layoutCount = 4;
+let panelModels = MODELS.slice();
+let playing = false, rafId = null, lastFrame = 0, lastOverlayT = -99, hoursPerSec = 1.4;
+const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, outside: "show", opacity: 0.85 };
+
+/* ── data access ──────────────────────────────────────────────────── */
+function isMissing(model, v) { return (DATA.missing[model] || []).indexOf(v) >= 0; }
+
+function getField(model, v, t, out) {
+  const block = (MODELS.indexOf(model) * DVARS.length + DVIDX[v]) * T * NCELL;
+  const t0 = Math.max(0, Math.min(T - 1, Math.floor(t)));
+  const t1 = Math.min(T - 1, t0 + 1);
+  const w = Math.max(0, Math.min(1, t - t0));
+  const lo = QUANT[v][0], sc = (QUANT[v][1] - QUANT[v][0]) / 65535;
+  const a = block + t0 * NCELL, b = block + t1 * NCELL;
+  const f = out || new Float32Array(NCELL);
+  for (let i = 0; i < NCELL; i++) {
+    const qa = U16[a + i], qb = U16[b + i];
+    f[i] = lo + (qa + (qb - qa) * w) * sc;
+  }
+  return f;
+}
+
+function sample(f, lon, lat) {
+  const gx = (lon - B.min_lon) / DLON * (NLON - 1), gy = (lat - B.min_lat) / DLAT * (NLAT - 1);
+  let i0 = Math.max(0, Math.min(NLON - 2, Math.floor(gx))), j0 = Math.max(0, Math.min(NLAT - 2, Math.floor(gy)));
+  const fx = Math.max(0, Math.min(1, gx - i0)), fy = Math.max(0, Math.min(1, gy - j0));
+  const a = j0 * NLON + i0;
+  return (f[a] * (1 - fx) + f[a + 1] * fx) * (1 - fy) + (f[a + NLON] * (1 - fx) + f[a + NLON + 1] * fx) * fy;
+}
+
+function sampleQ(model, v, t, lon, lat) {
+  if (isMissing(model, v)) return null;
+  const base = (MODELS.indexOf(model) * DVARS.length + DVIDX[v]) * T * NCELL + t * NCELL;
+  const gx = (lon - B.min_lon) / DLON * (NLON - 1), gy = (lat - B.min_lat) / DLAT * (NLAT - 1);
+  let i0 = Math.max(0, Math.min(NLON - 2, Math.floor(gx))), j0 = Math.max(0, Math.min(NLAT - 2, Math.floor(gy)));
+  const fx = Math.max(0, Math.min(1, gx - i0)), fy = Math.max(0, Math.min(1, gy - j0));
+  const a = base + j0 * NLON + i0;
+  const q = (U16[a] * (1 - fx) + U16[a + 1] * fx) * (1 - fy) + (U16[a + NLON] * (1 - fx) + U16[a + NLON + 1] * fx) * fy;
+  return QUANT[v][0] + q * (QUANT[v][1] - QUANT[v][0]) / 65535;
+}
+
+function fmtV(v, d) {
+  let s = v.toFixed(d);
+  if (/^-0(\.0+)?$/.test(s)) s = s.slice(1);
+  return s;
+}
+function fmtStop(v) { return (Math.abs(v) >= 10 || Number.isInteger(v)) ? String(Math.round(v * 10) / 10) : String(+v.toFixed(2)); }
+function compass(deg) {
+  return ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"][Math.round(deg / 22.5) % 16];
+}
+
+/* ── colour LUTs ──────────────────────────────────────────────────── */
+const LUT_N = 2048;
+const lutCache = {};
+function hexRGBA(h) {
+  h = h.replace("#", "");
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16),
+          h.length >= 8 ? parseInt(h.slice(6,8),16) / 255 : 1];
+}
+function cssColor(h) { const c = hexRGBA(h); return "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + c[3].toFixed(3) + ")"; }
+function buildLut(v) {
+  if (lutCache[v]) return lutCache[v];
+  const stops = META[v].stops.map(s => [s[0], hexRGBA(s[1])]);
+  const vmin = stops[0][0], vmax = stops[stops.length - 1][0], pw = META[v].pow || 1;
+  const u8 = new Uint8Array(LUT_N * 4);
+  let seg = 0;
+  for (let i = 0; i < LUT_N; i++) {
+    const val = vmin + (vmax - vmin) * Math.pow(i / (LUT_N - 1), 1 / pw);
+    while (seg < stops.length - 2 && val > stops[seg + 1][0]) seg++;
+    const s0 = stops[seg], s1 = stops[seg + 1];
+    const f = Math.max(0, Math.min(1, (val - s0[0]) / (s1[0] - s0[0])));
+    const a0 = s0[1][3], a1 = s1[1][3];
+    for (let k = 0; k < 3; k++) {          /* premultiplied interpolation */
+      u8[i * 4 + k] = Math.round(s0[1][k] * a0 + (s1[1][k] * a1 - s0[1][k] * a0) * f);
+    }
+    u8[i * 4 + 3] = Math.round((a0 + (a1 - a0) * f) * 255);
+  }
+  return lutCache[v] = { u8: u8, vmin: vmin, vmax: vmax, pow: pw };
+}
+
+/* ── geometry helpers ─────────────────────────────────────────────── */
+function tracePath(ctx, rings, X, Y) {
+  for (const r of rings) {
+    ctx.moveTo(X(r[0]), Y(r[1]));
+    for (let i = 2; i < r.length; i += 2) ctx.lineTo(X(r[i]), Y(r[i + 1]));
+    ctx.closePath();
+  }
+}
+function haloText(ctx, txt, x, y, font, fill, halo) {
+  ctx.font = font; ctx.lineJoin = "round"; ctx.lineWidth = 3;
+  ctx.strokeStyle = halo || "rgba(255,255,255,0.88)"; ctx.strokeText(txt, x, y);
+  ctx.fillStyle = fill; ctx.fillText(txt, x, y);
+}
+
+/* Catmull-Rom upsample, clamped to the local range (no ringing) */
+function upsampleCR(f, K) {
+  const NX = (NLON - 1) * K + 1, NY = (NLAT - 1) * K + 1, out = new Float32Array(NX * NY);
+  const at = (i, j) => f[Math.max(0, Math.min(NLAT - 1, j)) * NLON + Math.max(0, Math.min(NLON - 1, i))];
+  const w = t => { const t2 = t * t, t3 = t2 * t;
+    return [-0.5*t3 + t2 - 0.5*t, 1.5*t3 - 2.5*t2 + 1, -1.5*t3 + 2*t2 + 0.5*t, 0.5*t3 - 0.5*t2]; };
+  for (let oy = 0; oy < NY; oy++) {
+    const gy = oy / K; let j0 = Math.min(NLAT - 2, Math.floor(gy)); const wy = w(gy - j0);
+    for (let ox = 0; ox < NX; ox++) {
+      const gx = ox / K; let i0 = Math.min(NLON - 2, Math.floor(gx)); const wx = w(gx - i0);
+      let v = 0;
+      for (let dj = -1; dj <= 2; dj++) {
+        let r = 0;
+        for (let di = -1; di <= 2; di++) r += wx[di + 1] * at(i0 + di, j0 + dj);
+        v += wy[dj + 1] * r;
+      }
+      const a = at(i0, j0), b = at(i0 + 1, j0), c = at(i0, j0 + 1), d = at(i0 + 1, j0 + 1);
+      out[oy * NX + ox] = Math.max(Math.min(a, b, c, d), Math.min(Math.max(a, b, c, d), v));
+    }
+  }
+  return { g: out, NX: NX, NY: NY };
+}
+
+/* marching squares -> flat [x1,y1,x2,y2,...] in panel pixels */
+function contourSegs(g, NX, NY, lv, W, H) {
+  const out = [], sx = W / (NX - 1), sy = H / (NY - 1);
+  const P = (x0, y0, v0, x1, y1, v1) => { const t = (lv - v0) / (v1 - v0);
+    return [(x0 + (x1 - x0) * t) * sx, H - (y0 + (y1 - y0) * t) * sy]; };
+  for (let j = 0; j < NY - 1; j++) for (let i = 0; i < NX - 1; i++) {
+    const v00 = g[j*NX+i], v10 = g[j*NX+i+1], v11 = g[(j+1)*NX+i+1], v01 = g[(j+1)*NX+i];
+    const idx = (v00 > lv ? 1 : 0) | (v10 > lv ? 2 : 0) | (v11 > lv ? 4 : 0) | (v01 > lv ? 8 : 0);
+    if (idx === 0 || idx === 15) continue;
+    const eB = () => P(i, j, v00, i+1, j, v10), eR = () => P(i+1, j, v10, i+1, j+1, v11);
+    const eT = () => P(i, j+1, v01, i+1, j+1, v11), eL = () => P(i, j, v00, i, j+1, v01);
+    const seg = (a, b) => out.push(a[0], a[1], b[0], b[1]);
+    switch (idx) {
+      case 1: case 14: seg(eL(), eB()); break;
+      case 2: case 13: seg(eB(), eR()); break;
+      case 3: case 12: seg(eL(), eR()); break;
+      case 4: case 11: seg(eR(), eT()); break;
+      case 5: seg(eL(), eB()); seg(eR(), eT()); break;
+      case 6: case 9: seg(eB(), eT()); break;
+      case 7: case 8: seg(eL(), eT()); break;
+      case 10: seg(eL(), eT()); seg(eB(), eR()); break;
+    }
+  }
+  return out;
+}
+
+function drawIsolines(ctx, f, step, labelEvery, W, H, placed) {
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < NCELL; i++) { if (f[i] < mn) mn = f[i]; if (f[i] > mx) mx = f[i]; }
+  const up = upsampleCR(f, 6);
+  const levels = [];
+  for (let lv = Math.ceil(mn / step) * step; lv <= mx; lv += step) levels.push(lv);
+  const all = [];
+  for (const lv of levels) all.push([lv, contourSegs(up.g, up.NX, up.NY, lv, W, H)]);
+  ctx.lineCap = "round";
+  for (const pass of [0, 1]) {
+    ctx.beginPath();
+    for (const [, s] of all) for (let i = 0; i < s.length; i += 4) { ctx.moveTo(s[i], s[i+1]); ctx.lineTo(s[i+2], s[i+3]); }
+    ctx.strokeStyle = pass === 0 ? "rgba(10,20,30,0.28)" : "rgba(255,255,255,0.9)";
+    ctx.lineWidth = pass === 0 ? 2.6 : 1;
+    ctx.stroke();
+  }
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const [lv, s] of all) {
+    if (Math.round(lv) % labelEvery !== 0) continue;
+    for (let i = 0; i < s.length; i += 4 * 7) {
+      const x = (s[i] + s[i+2]) / 2, y = (s[i+1] + s[i+3]) / 2;
+      if (x < 26 || x > W - 26 || y < 14 || y > H - 14) continue;
+      let ok = true;
+      for (const p of placed) if ((p[0]-x)*(p[0]-x) + (p[1]-y)*(p[1]-y) < 110*110) { ok = false; break; }
+      if (!ok) continue;
+      placed.push([x, y]);
+      let ang = Math.atan2(s[i+3] - s[i+1], s[i+2] - s[i]);
+      if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+      haloText(ctx, String(Math.round(lv)), 0, 0, "600 10px " + FONT, "#111", "rgba(255,255,255,0.8)");
+      ctx.restore();
+    }
+  }
+}
+
+function selectExtrema(f, mode) {
+  const cand = [];
+  for (let i = 0; i < NCELL; i++) if (MASK[i] && isFinite(f[i])) cand.push(i);
+  cand.sort((a, b) => mode === "max" ? f[b] - f[a] : f[a] - f[b]);
+  const sel = [];
+  for (const idx of cand) {
+    const la = B.min_lat + Math.floor(idx / NLON) * DLAT / (NLAT - 1);
+    const lo = B.min_lon + (idx % NLON) * DLON / (NLON - 1);
+    if (sel.every(s => Math.abs(la - s[0]) >= DATA.hl.minSep || Math.abs(lo - s[1]) >= DATA.hl.minSep)) sel.push([la, lo, f[idx]]);
+    if (sel.length >= DATA.hl.count) break;
+  }
+  return sel;
+}
+
+/* ── WebGL shader ─────────────────────────────────────────────────── */
+const VS = `#version 300 es
+out vec2 vUv;
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  vUv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+const FS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uData;
+uniform sampler2D uLut;
+uniform ivec2 uDim;
+uniform vec2 uRange;
+uniform float uPow;
+uniform float uOpacity;
+in vec2 vUv;
+out vec4 outColor;
+float at(int i, int j) {
+  return texelFetch(uData, ivec2(clamp(i, 0, uDim.x - 1), clamp(j, 0, uDim.y - 1)), 0).r;
+}
+vec4 cr(float t) {
+  float t2 = t * t, t3 = t2 * t;
+  return vec4(-0.5*t3 + t2 - 0.5*t, 1.5*t3 - 2.5*t2 + 1.0, -1.5*t3 + 2.0*t2 + 0.5*t, 0.5*t3 - 0.5*t2);
+}
+float row(int j, int i0, vec4 wx) {
+  return wx.x*at(i0-1, j) + wx.y*at(i0, j) + wx.z*at(i0+1, j) + wx.w*at(i0+2, j);
+}
+void main() {
+  vec2 g = vec2(vUv.x * float(uDim.x - 1), vUv.y * float(uDim.y - 1));
+  ivec2 c = ivec2(floor(g));
+  c = clamp(c, ivec2(0), uDim - 2);
+  vec2 f = g - vec2(c);
+  vec4 wx = cr(f.x), wy = cr(f.y);
+  float v = wy.x*row(c.y-1, c.x, wx) + wy.y*row(c.y, c.x, wx) + wy.z*row(c.y+1, c.x, wx) + wy.w*row(c.y+2, c.x, wx);
+  float a = at(c.x, c.y), b = at(c.x+1, c.y), d = at(c.x, c.y+1), e = at(c.x+1, c.y+1);
+  v = clamp(v, min(min(a, b), min(d, e)), max(max(a, b), max(d, e)));
+  float t = pow(clamp((v - uRange.x) / (uRange.y - uRange.x), 0.0, 1.0), uPow);
+  vec4 col = texture(uLut, vec2(mix(0.5 / 2048.0, 1.0 - 0.5 / 2048.0, t), 0.5));
+  float n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+  col.rgb += (n - 0.5) / 255.0 * col.a;
+  outColor = col * uOpacity;
+}`;
+
+function compile(gl, type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+/* ── Panel ────────────────────────────────────────────────────────── */
+class Panel {
+  constructor(idx, el) {
+    this.idx = idx; this.el = el; this.box = el.querySelector(".mapbox");
+    this.cBase = el.querySelector(".c-base"); this.cGL = el.querySelector(".c-gl");
+    this.cFlow = el.querySelector(".c-flow"); this.cOver = el.querySelector(".c-over");
+    this.ctxB = this.cBase.getContext("2d"); this.ctxF = this.cFlow.getContext("2d"); this.ctxO = this.cOver.getContext("2d");
+    this.W = 0; this.H = 0; this.dpr = 1; this.model = MODELS[idx];
+    this.field = new Float32Array(NCELL); this.fu = new Float32Array(NCELL); this.fv = new Float32Array(NCELL);
+    this.flowReady = false; this.missing = false; this.frame = 0; this.lutVar = null;
+    this.initGL();
+  }
+  initGL() {
+    const gl = this.cGL.getContext("webgl2", { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false });
+    this.gl = null;
+    if (!gl) return;
+    try {
+      const prog = gl.createProgram();
+      gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VS));
+      gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, FS));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+      this.u = {};
+      ["uData","uLut","uDim","uRange","uPow","uOpacity"].forEach(n => this.u[n] = gl.getUniformLocation(prog, n));
+      this.vao = gl.createVertexArray();
+      this.texData = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.texData);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, NLON, NLAT, 0, gl.RED, gl.FLOAT, null);
+      this.texLut = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.texLut);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.prog = prog; this.gl = gl;
+    } catch (e) { console.error("WebGL2 init failed:", e); this.gl = null; }
+  }
+  resize() {
+    const cw = this.el.clientWidth, ch = this.el.clientHeight;
+    if (cw < 20 || ch < 20) return false;
+    let w, h;
+    if (cw / ch > ASPECT) { h = ch; w = ch * ASPECT; } else { w = cw; h = cw / ASPECT; }
+    w = Math.floor(w); h = Math.floor(h);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (w === this.W && h === this.H && dpr === this.dpr) return false;
+    this.W = w; this.H = h; this.dpr = dpr;
+    this.box.style.width = w + "px"; this.box.style.height = h + "px";
+    for (const c of [this.cBase, this.cGL, this.cOver]) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    this.cFlow.width = w; this.cFlow.height = h;
+    this.drawBase(); this.initParticles(); this.lutVar = null;
+    return true;
+  }
+  X(lon) { return (lon - B.min_lon) / DLON * this.W; }
+  Y(lat) { return (B.max_lat - lat) / DLAT * this.H; }
+
+  drawBase() {
+    const ctx = this.ctxB, W = this.W, H = this.H, X = lon => this.X(lon), Y = lat => this.Y(lat);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const hasLand = BASE.land && BASE.land.length;
+    ctx.fillStyle = hasLand ? "#a9bccb" : "#d9d6cd"; ctx.fillRect(0, 0, W, H);
+    if (hasLand) {
+      ctx.beginPath(); tracePath(ctx, BASE.land, X, Y);
+      ctx.fillStyle = "#d9d6cd"; ctx.fill("evenodd");
+      ctx.lineWidth = 0.8; ctx.strokeStyle = "rgba(70,90,110,0.55)"; ctx.stroke();
+    }
+    if (BASE.states && BASE.states.length) {
+      ctx.beginPath(); tracePath(ctx, BASE.states, X, Y);
+      ctx.lineWidth = 0.8; ctx.strokeStyle = "rgba(90,98,108,0.6)"; ctx.stroke();
+    }
+  }
+
+  clearGL() {
+    const gl = this.gl; if (!gl) return;
+    gl.viewport(0, 0, this.cGL.width, this.cGL.height);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+  drawGL(v, opacity) {
+    const gl = this.gl; if (!gl || !this.W) return;
+    const lut = buildLut(v);
+    gl.viewport(0, 0, this.cGL.width, this.cGL.height);
+    gl.useProgram(this.prog); gl.bindVertexArray(this.vao);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.texData);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, NLON, NLAT, gl.RED, gl.FLOAT, this.field);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.texLut);
+    if (this.lutVar !== v) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, LUT_N, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, lut.u8);
+      this.lutVar = v;
+    }
+    gl.uniform1i(this.u.uData, 0); gl.uniform1i(this.u.uLut, 1);
+    gl.uniform2i(this.u.uDim, NLON, NLAT);
+    gl.uniform2f(this.u.uRange, lut.vmin, lut.vmax);
+    gl.uniform1f(this.u.uPow, lut.pow); gl.uniform1f(this.u.uOpacity, opacity);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /* ---- wind particles ---- */
+  initParticles() {
+    const n = Math.min(2600, Math.round(this.W * this.H / 650));
+    this.pn = n; this.px = new Float32Array(n); this.py = new Float32Array(n); this.pa = new Int16Array(n);
+    for (let i = 0; i < n; i++) this.respawn(i, true);
+    this.ctxF.clearRect(0, 0, this.W, this.H);
+  }
+  respawn(i, init) {
+    this.px[i] = Math.random() * this.W; this.py[i] = Math.random() * this.H;
+    this.pa[i] = 40 + Math.floor(Math.random() * 90) + (init ? Math.floor(Math.random() * 60) : 0);
+  }
+  clearFlow() { this.ctxF.clearRect(0, 0, this.W, this.H); }
+  stepFlow() {
+    if (!this.flowReady || !this.W) return;
+    const ctx = this.ctxF, W = this.W, H = this.H, u = this.fu, v = this.fv;
+    this.frame++;
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "rgba(0,0,0," + (this.frame % 20 === 0 ? 0.3 : 0.05) + ")";
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = "rgba(255,255,255,0.88)"; ctx.lineWidth = 1.1; ctx.lineCap = "round";
+    ctx.beginPath();
+    const k = 0.12 * W / 900, sx = (NLON - 1) / W, sy = (NLAT - 1) / H;
+    for (let i = 0; i < this.pn; i++) {
+      const x = this.px[i], y = this.py[i];
+      if (--this.pa[i] <= 0) { this.respawn(i, false); continue; }
+      const gx = x * sx, gy = (H - y) * sy;
+      let i0 = Math.max(0, Math.min(NLON - 2, gx | 0)), j0 = Math.max(0, Math.min(NLAT - 2, gy | 0));
+      const fx = gx - i0, fy = gy - j0, a = j0 * NLON + i0, b = a + 1, c = a + NLON, d = c + 1;
+      const uu = (u[a] * (1 - fx) + u[b] * fx) * (1 - fy) + (u[c] * (1 - fx) + u[d] * fx) * fy;
+      const vv = (v[a] * (1 - fx) + v[b] * fx) * (1 - fy) + (v[c] * (1 - fx) + v[d] * fx) * fy;
+      const nx = x + uu * k, ny = y - vv * k;
+      if (nx < 0 || nx > W || ny < 0 || ny > H) { this.respawn(i, false); continue; }
+      ctx.moveTo(x, y); ctx.lineTo(nx, ny);
+      this.px[i] = nx; this.py[i] = ny;
+    }
+    ctx.stroke();
+  }
+
+  /* ---- overlay ---- */
+  drawOverlay(v, t) {
+    const ctx = this.ctxO, W = this.W, H = this.H; if (!W) return;
+    const X = lon => this.X(lon), Y = lat => this.Y(lat), meta = META[v], model = this.model;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    if (opts.outside !== "show") {
+      ctx.beginPath(); ctx.rect(0, 0, W, H); tracePath(ctx, BASE.texas, X, Y);
+      ctx.fillStyle = opts.outside === "dim" ? "rgba(12,18,26,0.42)" : "rgba(12,18,26,0.92)";
+      ctx.fill("evenodd");
+    }
+
+    const placed = [];
+    if (opts.iso && !isMissing(model, "pressure_msl")) drawIsolines(ctx, getField(model, "pressure_msl", t), 2, 4, W, H, placed);
+    if (opts.isot && !isMissing(model, "temperature_2m")) drawIsolines(ctx, getField(model, "temperature_2m", t), 5, 10, W, H, placed);
+
+    ctx.beginPath(); tracePath(ctx, BASE.texas, X, Y);
+    ctx.lineJoin = "round"; ctx.lineWidth = 1.1; ctx.strokeStyle = "rgba(24,32,44,0.9)"; ctx.stroke();
+
+    if (this.missing) {
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      haloText(ctx, MODEL_LABEL(model) + " does not provide", W / 2, H / 2 - 9, "600 13px " + FONT, "#111");
+      haloText(ctx, meta.label, W / 2, H / 2 + 9, "600 13px " + FONT, "#111");
+    } else {
+      const dec = meta.decimals, f = this.field;
+      if (opts.cities) {
+        ctx.textAlign = "center";
+        for (const c of DATA.cities) {
+          const name = c[0], lat = c[1], lon = c[2], tx = X(lon + c[3]), ty = Y(lat + c[4]);
+          const val = sample(f, lon, lat);
+          ctx.beginPath(); ctx.arc(X(lon), Y(lat), 3, 0, 6.2832);
+          ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 0.9; ctx.strokeStyle = "#111"; ctx.stroke();
+          ctx.textBaseline = "bottom"; haloText(ctx, name, tx, ty - 6, "500 10px " + FONT, "#111");
+          ctx.textBaseline = "top"; haloText(ctx, fmtV(val, dec), tx, ty + 5, "700 11px " + FONT, "#111");
+        }
+        for (const c of DATA.valueOnly) {
+          const val = sample(f, c[2], c[1]);
+          ctx.beginPath(); ctx.arc(X(c[2]), Y(c[1]), 2.6, 0, 6.2832);
+          ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 0.8; ctx.strokeStyle = "#111"; ctx.stroke();
+          ctx.textBaseline = "top"; haloText(ctx, fmtV(val, dec), X(c[2]), Y(c[1]) + 5, "700 10.5px " + FONT, "#111");
+        }
+      }
+      if (opts.hl && v !== "precipitation_probability") {
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const isP = v === "precipitation" || v === "precip_3h";
+        for (const mode of ["max", "min"]) {
+          if (isP && mode === "min") continue;
+          for (const e of selectExtrema(f, mode)) {
+            if (mode === "max" && (isP ? e[2] < 0.1 : (v === "shortwave_radiation" && e[2] <= 0))) continue;
+            if (mode === "min" && v === "shortwave_radiation" && e[2] <= 0) continue;
+            haloText(ctx, (mode === "max" ? "H " : "L ") + fmtV(e[2], dec), X(e[1]), Y(e[0]),
+                     "800 13px " + FONT, mode === "max" ? "#8a1010" : "#0d3a8a");
+          }
+        }
       }
     }
-    panelModels[idx] = chosen;
-    update();
+    /* model chip */
+    const label = MODEL_LABEL(model);
+    ctx.font = "700 13px " + FONT; const tw = ctx.measureText(label).width;
+    ctx.fillStyle = "rgba(255,255,255,0.88)"; ctx.beginPath();
+    ctx.moveTo(8, 8); ctx.arcTo(8 + tw + 16, 8, 8 + tw + 16, 30, 5); ctx.arcTo(8 + tw + 16, 30, 8, 30, 5);
+    ctx.arcTo(8, 30, 8, 8, 5); ctx.arcTo(8, 8, 8 + tw + 16, 8, 5); ctx.closePath(); ctx.fill();
+    ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = "#111"; ctx.fillText(label, 16, 19.5);
+  }
+
+  render(model, v, t, overlay) {
+    this.model = model;
+    this.missing = isMissing(model, v);
+    if (!this.missing) { getField(model, v, t, this.field); this.drawGL(v, opts.opacity); } else this.clearGL();
+    if (opts.flow && !isMissing(model, "wind_u") && !isMissing(model, "wind_v")) {
+      getField(model, "wind_u", t, this.fu); getField(model, "wind_v", t, this.fv); this.flowReady = true;
+    } else if (this.flowReady) { this.flowReady = false; this.clearFlow(); }
+    if (overlay) this.drawOverlay(v, t);
+  }
+}
+function MODEL_LABEL(m) { return (DATA.modelLabels && DATA.modelLabels[m]) || m; }
+
+const panels = [0,1,2,3].map(i => new Panel(i, $("panel" + i)));
+if (!panels[0].gl) { fatal("This viewer needs WebGL2, which your browser or GPU settings have disabled."); return; }
+
+/* ── legend ───────────────────────────────────────────────────────── */
+function drawLegend() {
+  const meta = META[currentVar], stops = meta.stops, n = stops.length;
+  legendLabel.textContent = meta.label + " (" + meta.unit + ")";
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), cw = legendCv.clientWidth, ch = legendCv.clientHeight;
+  if (!cw) return;
+  legendCv.width = Math.round(cw * dpr); legendCv.height = Math.round(ch * dpr);
+  const ctx = legendCv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const x0 = 10, x1 = cw - 10, y0 = 2, bh = 13;
+  ctx.fillStyle = "#d9d6cd"; ctx.fillRect(x0, y0, x1 - x0, bh);
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  stops.forEach((s, i) => g.addColorStop(i / (n - 1), cssColor(s[1])));
+  ctx.fillStyle = g; ctx.fillRect(x0, y0, x1 - x0, bh);
+  ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, bh - 1);
+  const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((x1 - x0) / 46))));
+  ctx.font = "11px " + FONT; ctx.fillStyle = "#93a0ae"; ctx.textBaseline = "top";
+  stops.forEach((s, i) => {
+    if (i % every !== 0 && i !== n - 1) return;
+    const x = x0 + (x1 - x0) * i / (n - 1);
+    ctx.textAlign = i === 0 ? "left" : i === n - 1 ? "right" : "center";
+    ctx.fillText(fmtStop(s[0]), x, y0 + bh + 4);
+  });
+}
+
+/* ── render loop / time ───────────────────────────────────────────── */
+function curT() { return Math.max(0, Math.min(T - 1, Math.round(tPos))); }
+
+function syncUI() {
+  const t = curT(), d = DATE_OF[t];
+  if (dateSelect.value !== d) { dateSelect.value = d; hourSlider.max = dayIdx[d].length - 1; }
+  hourSlider.value = t - dayIdx[d][0];
+  const dt = new Date(d + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  timeLabel.textContent = dt + "  •  HE " + (HOUR_OF[t] + 1) + " CT";
+}
+
+function renderAll(forceOverlay) {
+  const doOverlay = forceOverlay || Math.abs(tPos - lastOverlayT) >= 0.25;
+  if (doOverlay) lastOverlayT = tPos;
+  for (let i = 0; i < layoutCount; i++) panels[i].render(panelModels[i], currentVar, tPos, doOverlay);
+}
+
+function frame(ts) {
+  rafId = null;
+  const dt = Math.min(0.1, (ts - lastFrame) / 1000); lastFrame = ts;
+  if (playing) {
+    tPos += dt * hoursPerSec; if (tPos > T - 1) tPos = 0;
+    syncUI(); renderAll(false);
+  }
+  for (let i = 0; i < layoutCount; i++) panels[i].stepFlow();
+  if (playing || opts.flow) rafId = requestAnimationFrame(frame);
+}
+function ensureLoop() {
+  if (!rafId && (playing || opts.flow)) { lastFrame = performance.now(); rafId = requestAnimationFrame(frame); }
+}
+function refresh() { syncUI(); renderAll(true); ensureLoop(); hideProbe(); }
+
+/* ── UI wiring ────────────────────────────────────────────────────── */
+dates.forEach(d => { const o = document.createElement("option"); o.value = d; o.textContent = d; dateSelect.appendChild(o); });
+VARS.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = META[v].label; varSelect.appendChild(o); });
+modelSelects.forEach((sel, idx) => {
+  MODELS.forEach(m => { const o = document.createElement("option"); o.value = m; o.textContent = MODEL_LABEL(m); sel.appendChild(o); });
+  sel.value = MODELS[idx];
+  sel.onchange = () => {
+    const chosen = sel.value, prev = panelModels[idx];
+    for (let j = 0; j < layoutCount; j++) if (j !== idx && panelModels[j] === chosen) { panelModels[j] = prev; modelSelects[j].value = prev; break; }
+    panelModels[idx] = chosen; refresh();
   };
 });
 
-function imgName(model, variable, date, hour) {
-  return `images/${model}_${variable}_${date}_${String(hour).padStart(2,"0")}.png`;
-}
-
-function update() {
-  const d = new Date(currentDate + "T00:00:00");
-  const dateText = d.toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"});
-  // Hour-ending label: data hour h (beginning) spans h:00–(h+1):00 → HE (h+1).
-  // Hour 0 (12AM–1AM) → HE 1; hour 7 (7AM–8AM) → HE 8; hour 23 (11PM–12AM) → HE 24.
-  const he = currentHour + 1;
-  timeLabel.textContent = `${dateText}  •  HE ${he} CT`;
-
-  for (let i = 0; i < layoutCount; i++) {
-    const model = panelModels[i];
-    imgs[i].src = imgName(model, currentVar, currentDate, currentHour);
-    imgs[i].dataset.modelIdx = String(DATA.models.indexOf(model));
-  }
-  hideProbe();
-}
+function resizeAll() { let changed = false; for (let i = 0; i < layoutCount; i++) if (panels[i].resize()) changed = true; return changed; }
 
 function applyLayout(n) {
-  layoutCount = n;
-  mapsEl.className = "layout-" + n;
-
-  // Ensure panelModels has n unique models
-  const used = new Set();
-  const next = [];
+  layoutCount = n; mapsEl.className = "layout-" + n;
+  const used = new Set(), next = [];
   for (let i = 0; i < n; i++) {
     let m = panelModels[i];
-    if (!m || used.has(m)) {
-      m = DATA.models.find(x => !used.has(x));
-    }
-    used.add(m);
-    next.push(m);
+    if (!m || used.has(m)) m = MODELS.find(x => !used.has(x));
+    used.add(m); next.push(m);
   }
-  // If layout is 4, force all four models in default order
-  if (n === 4) {
-    panelModels = DATA.models.slice();
-  } else {
-    panelModels = next.concat(DATA.models.filter(m => !used.has(m)));
-  }
-
-  panels.forEach((p, i) => {
-    if (i < n) p.classList.remove("hidden");
-    else p.classList.add("hidden");
-  });
-
-  // Show N model dropdowns; disable all when n === 4 (must show all models)
-  modelWraps.forEach((w, i) => {
-    if (i < n) w.classList.remove("hidden");
-    else w.classList.add("hidden");
-  });
-  modelSelects.forEach((sel, i) => {
-    sel.value = panelModels[i];
-    sel.disabled = (n === 4);
-  });
-
-  update();
+  panelModels = n === 4 ? MODELS.slice() : next.concat(MODELS.filter(m => !used.has(m)));
+  panels.forEach((p, i) => p.el.classList.toggle("hidden", i >= n));
+  modelWraps.forEach((w, i) => w.classList.toggle("hidden", i >= n));
+  modelSelects.forEach((sel, i) => { sel.value = panelModels[i]; sel.disabled = (n === 4); });
+  resizeAll(); refresh();
 }
 
-dateSelect.onchange   = e => { currentDate = e.target.value; currentHour = 12; hourSlider.value = 12; update(); };
-varSelect.onchange    = e => { currentVar  = e.target.value; update(); };
-layoutSelect.onchange = e => { applyLayout(+e.target.value); };
-hourSlider.oninput    = e => { currentHour = +e.target.value; update(); };
-
+dateSelect.onchange = e => { const d = e.target.value, ix = dayIdx[d]; hourSlider.max = ix.length - 1; tPos = ix[Math.min(12, ix.length - 1)]; refresh(); };
+varSelect.onchange = e => { currentVar = e.target.value; drawLegend(); refresh(); };
+layoutSelect.onchange = e => applyLayout(+e.target.value);
+hourSlider.oninput = e => { tPos = dayIdx[DATE_OF[curT()]][0] + (+e.target.value); refresh(); };
+speedSelect.onchange = e => { hoursPerSec = +e.target.value; };
+outsideSelect.onchange = e => { opts.outside = e.target.value; renderAll(true); };
+opacityRange.oninput = e => { opts.opacity = +e.target.value / 100; renderAll(false); };
+[["chkFlow","flow"],["chkIso","iso"],["chkIsot","isot"],["chkCities","cities"],["chkHL","hl"]].forEach(([id, k]) => {
+  $(id).onchange = e => {
+    opts[k] = e.target.checked;
+    if (k === "flow" && !opts.flow) panels.forEach(p => { p.flowReady = false; p.clearFlow(); });
+    renderAll(true); ensureLoop();
+  };
+});
 playBtn.onclick = () => {
-  playing = !playing;
-  playBtn.textContent = playing ? "❚❚ Pause" : "▶ Play";
-  if (playing) {
-    hideProbe();
-    timer = setInterval(() => {
-      currentHour = (currentHour + 1) % 24;
-      hourSlider.value = currentHour;
-      update();
-    }, 700);
-  } else clearInterval(timer);
+  playing = !playing; playBtn.textContent = playing ? "❚❚ Pause" : "▶ Play";
+  if (playing) hideProbe(); else { tPos = curT(); refresh(); }
+  ensureLoop();
 };
-
-
-document.getElementById("subtitle").textContent =
-  `${DATA.npoints} source points • ${DATA.models.length} models • high-res images`;
-document.getElementById("lastUpdated").textContent =
-  `Last updated: ${DATA.generated_at} CT`;
-
-dateSelect.value = currentDate;
-varSelect.value  = currentVar;
-layoutSelect.value = String(layoutCount);
-hourSlider.value = currentHour;
-applyLayout(layoutCount);
-update();
-
-/* ── Click-to-inspect ─────────────────────────────────────────────── */
-
-function hideProbe() { probeEl.style.display = "none"; }
-
-function clickToLatLon(img, event) {
-  // Map click → lat/lon accounting for object-fit: contain letterboxing.
-  const rect = img.getBoundingClientRect();
-  const natW = img.naturalWidth || 1;
-  const natH = img.naturalHeight || 1;
-  const scale = Math.min(rect.width / natW, rect.height / natH);
-  const dispW = natW * scale;
-  const dispH = natH * scale;
-  const offsetX = (rect.width - dispW) / 2;
-  const offsetY = (rect.height - dispH) / 2;
-  const x = event.clientX - rect.left - offsetX;
-  const y = event.clientY - rect.top - offsetY;
-  if (x < 0 || y < 0 || x > dispW || y > dispH) return null;
-  const lon = BOUNDS.min_lon + (x / dispW) * (BOUNDS.max_lon - BOUNDS.min_lon);
-  // Image top = max_lat (matplotlib saves with north at top)
-  const lat = BOUNDS.max_lat - (y / dispH) * (BOUNDS.max_lat - BOUNDS.min_lat);
-  return { lat, lon };
-}
-
-function nearestIndex(arr, val) {
-  let best = 0, bestD = Infinity;
-  for (let i = 0; i < arr.length; i++) {
-    const d = Math.abs(arr[i] - val);
-    if (d < bestD) { bestD = d; best = i; }
-  }
-  return best;
-}
-
-function fmtVal(varKey, v) {
-  if (v == null || Number.isNaN(v)) return "—";
-  if (varKey === "precipitation") return v.toFixed(1);
-  if (varKey === "cloud_cover" || varKey === "precipitation_probability"
-      || varKey === "relative_humidity_2m")
-    return Math.round(v).toString();
-  if (varKey === "shortwave_radiation") return Math.round(v).toString();
-  if (varKey === "wind_speed_10m") return v.toFixed(1);
-  return Math.round(v).toString();
-}
-
-function showProbe(panelIdx, lat, lon, clientX, clientY) {
-  if (!GRID) {
-    probeEl.innerHTML = `<div class="probe-title">Loading grid…</div>`;
-    probeEl.style.display = "block";
-    placeProbe(clientX, clientY);
-    return;
-  }
-  const model = panelModels[panelIdx];
-  const label = (DATA.modelLabels && DATA.modelLabels[model]) || model;
-  const i = nearestIndex(GRID.lats, lat);
-  const j = nearestIndex(GRID.lons, lon);
-  const flat = i * GRID.nlon + j;
-  const sampleLat = GRID.lats[i];
-  const sampleLon = GRID.lons[j];
-
-  let rows = "";
-  for (const v of DATA.variables) {
-    const meta = DATA.varMeta[v] || {};
-    const unit = meta.unit || "";
-    let val = null;
-    try {
-      val = GRID.grids[model][v][currentDate][currentHour][flat];
-    } catch (e) { val = null; }
-    const name = meta.label || v;
-    rows += `<tr><td class="k">${name}</td><td class="v">${fmtVal(v, val)}${unit && val != null && !Number.isNaN(val) ? " " + unit : ""}</td></tr>`;
-  }
-
-  probeEl.innerHTML =
-    `<div class="probe-title">${label}</div>` +
-    `<div class="probe-loc">${sampleLat.toFixed(2)}°N, ${Math.abs(sampleLon).toFixed(2)}°W</div>` +
-    `<table>${rows}</table>`;
-  probeEl.style.display = "block";
-  placeProbe(clientX, clientY);
-}
-
-function placeProbe(clientX, clientY) {
-  const pad = 14;
-  const w = probeEl.offsetWidth || 220;
-  const h = probeEl.offsetHeight || 180;
-  let left = clientX + pad;
-  let top = clientY + pad;
-  if (left + w > window.innerWidth - 8) left = clientX - w - pad;
-  if (top + h > window.innerHeight - 8) top = clientY - h - pad;
-  probeEl.style.left = Math.max(8, left) + "px";
-  probeEl.style.top = Math.max(8, top) + "px";
-}
-
-imgs.forEach((img, idx) => {
-  img.addEventListener("click", (e) => {
-    const ll = clickToLatLon(img, e);
-    if (!ll) { hideProbe(); return; }
-    showProbe(idx, ll.lat, ll.lon, e.clientX, e.clientY);
-  });
-});
-
-// Dismiss probe on outside click / Escape
-document.addEventListener("click", (e) => {
-  if (!e.target.closest || !e.target.closest(".panel")) hideProbe();
-}, true);
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", e => {
+  if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.key !== "Escape") return;
   if (e.key === "Escape") hideProbe();
+  else if (e.key === " ") { e.preventDefault(); playBtn.click(); }
+  else if (e.key === "ArrowRight") { tPos = Math.min(T - 1, curT() + 1); refresh(); }
+  else if (e.key === "ArrowLeft") { tPos = Math.max(0, curT() - 1); refresh(); }
 });
 
-// Load compact grid data via <script> (works under file://; fetch does not)
-(function loadGrid() {
-  const s = document.createElement("script");
-  s.src = "grid_data.js";
-  s.async = true;
-  s.onload = () => {
-    if (window.GRID) {
-      GRID = window.GRID;
-      document.getElementById("probeHint").textContent =
-        "Click a map to probe all variables";
-    }
-  };
-  s.onerror = () => {
-    document.getElementById("probeHint").textContent =
-      "Probe unavailable (missing grid_data.js)";
-  };
-  document.head.appendChild(s);
+/* ── probe ────────────────────────────────────────────────────────── */
+function hideProbe() { probeEl.style.display = "none"; }
+function showProbe(pi, e) {
+  const p = panels[pi], r = p.box.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  if (x < 0 || y < 0 || x > r.width || y > r.height) { hideProbe(); return; }
+  const lon = B.min_lon + x / r.width * DLON, lat = B.max_lat - y / r.height * DLAT;
+  const model = panelModels[pi], t = curT();
+  let rows = "";
+  for (const v of VARS) {
+    const meta = META[v], val = sampleQ(model, v, t, lon, lat);
+    rows += '<tr><td class="k">' + meta.label + '</td><td class="v">' +
+            (val == null ? "n/a" : fmtV(val, meta.decimals) + " " + meta.unit) + "</td></tr>";
+  }
+  const u = sampleQ(model, "wind_u", t, lon, lat), vv = sampleQ(model, "wind_v", t, lon, lat);
+  if (u != null && vv != null) {
+    const dir = (Math.atan2(-u, -vv) * 180 / Math.PI + 360) % 360;
+    rows += '<tr><td class="k">Wind From</td><td class="v">' + compass(dir) + " (" + Math.round(dir) + "°)</td></tr>";
+  }
+  probeEl.innerHTML = '<div class="probe-title">' + MODEL_LABEL(model) + '</div>' +
+    '<div class="probe-loc">' + lat.toFixed(2) + "°N, " + Math.abs(lon).toFixed(2) + "°W</div><table>" + rows + "</table>";
+  probeEl.style.display = "block";
+  const pad = 14, w = probeEl.offsetWidth || 230, h = probeEl.offsetHeight || 260;
+  let left = e.clientX + pad, top = e.clientY + pad;
+  if (left + w > innerWidth - 8) left = e.clientX - w - pad;
+  if (top + h > innerHeight - 8) top = e.clientY - h - pad;
+  probeEl.style.left = Math.max(8, left) + "px"; probeEl.style.top = Math.max(8, top) + "px";
+}
+panels.forEach((p, i) => p.box.addEventListener("click", e => showProbe(i, e)));
+document.addEventListener("click", e => { if (!e.target.closest || !e.target.closest(".panel")) hideProbe(); }, true);
+
+/* ── boot ─────────────────────────────────────────────────────────── */
+$("subtitle").textContent = DATA.npoints + " grid points • " + MODELS.length + " models • rendered live on your GPU";
+$("lastUpdated").textContent = "Last updated: " + DATA.generated_at + " CT";
+
+(function pickStart() {   /* start at the current hour (Central Time) if it is in range */
+  let t = -1;
+  try {
+    const s = new Date().toLocaleString("sv-SE", { timeZone: DATA.tz }).replace(" ", "T").slice(0, 13) + ":00";
+    t = DATA.times.indexOf(s);
+  } catch (e) {}
+  if (t < 0) { const d0 = dayIdx[dates[0]]; t = d0[Math.min(12, d0.length - 1)]; }
+  tPos = t;
+})();
+dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
+varSelect.value = currentVar; layoutSelect.value = "4";
+new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
+applyLayout(4); drawLegend();
+window.__viewer = { panels: panels, opts: opts, setT: t => { tPos = t; refresh(); }, setVar: v => { currentVar = v; varSelect.value = v; drawLegend(); refresh(); } };
 })();
 </script>
 </body>
@@ -1285,139 +1532,69 @@ document.addEventListener("keydown", (e) => {
 """
 
 
-def export_grid_data(out_dir, lats, lons, values, models, variables, dates):
-    """Write grid_data.js used by the click-to-inspect probe.
-
-    Uses a .js file (window.GRID = {...}) so the probe works when opening
-    index.html directly from disk — fetch() of a .json is blocked under
-    the file:// protocol in most browsers.
-
-    Values are rounded per-variable to keep the file small. Flat row-major
-    arrays (nlat * nlon) per hour.
-    """
-    def _round_arr(var, arr):
-        a = np.asarray(arr, dtype=float)
-        out = a.ravel().tolist()
-        if var == "precipitation":
-            return [None if (x is None or not np.isfinite(x)) else round(float(x), 2)
-                    for x in out]
-        if var in ("cloud_cover", "precipitation_probability", "relative_humidity_2m"):
-            return [None if (x is None or not np.isfinite(x)) else int(round(float(x)))
-                    for x in out]
-        if var == "shortwave_radiation":
-            return [None if (x is None or not np.isfinite(x)) else int(round(float(x)))
-                    for x in out]
-        if var == "wind_speed_10m":
-            return [None if (x is None or not np.isfinite(x)) else round(float(x), 1)
-                    for x in out]
-        # temps
-        return [None if (x is None or not np.isfinite(x)) else round(float(x), 1)
-                for x in out]
-
-    grids = {}
-    for model in models:
-        grids[model] = {}
-        for var in variables:
-            grids[model][var] = {}
-            for date in dates:
-                grids[model][var][date] = [
-                    _round_arr(var, values[model][var][date][h])
-                    for h in range(24)
-                ]
-
-    payload = {
-        "lats": [round(float(x), 4) for x in lats],
-        "lons": [round(float(x), 4) for x in lons],
-        "nlat": len(lats),
-        "nlon": len(lons),
-        "grids": grids,
-    }
-    path = out_dir / "grid_data.js"
-    body = "window.GRID=" + json.dumps(payload, separators=(",", ":")) + ";"
-    path.write_text(body, encoding="utf-8")
-    size_mb = path.stat().st_size / (1024 * 1024)
-    print(f"  Wrote {path.name} ({size_mb:.1f} MB)")
-    return path
-
+# ── main ──────────────────────────────────────────────────────────────────
 
 def main():
+    t0 = time.time()
     out_dir = Path(OUTPUT_DIR)
-    img_dir = out_dir / "images"
-    img_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    print("Grid + boundary…")
+    print("Grid + base map…")
     points, lats, lons = generate_grid(TEXAS_BOUNDS, SPACING)
     print(f"  data grid {len(lats)}×{len(lons)} = {len(points)} points")
-    texas_geom = fetch_texas_boundary()
-    texas_paths = polygon_to_mpl_path(texas_geom)
+    base = load_basemap()
+    texas_rings = [np.array(r, dtype=float).reshape(-1, 2) for r in base["texas"]]
+    mask = compute_inside_mask(lats, lons, texas_rings, SPACING)
+    print(f"  {int(mask.sum())} of {mask.size} grid cells fall inside Texas")
 
-    print("Precomputing shared geometry (mesh + mask, once)…")
-    geometry = precompute_geometry(lats, lons, texas_paths, factor=UPSAMPLE_FACTOR)
+    if DEMO_MODE:
+        print("DEMO MODE: generating synthetic data (no API calls)…")
+        arrs, timestamps = make_demo_data(lats, lons, MODELS)
+    else:
+        per_point, timestamps = fetch_all(points, MODELS, FETCH_VARS, FORECAST_DAYS, BATCH_SIZE)
+        arrs = build_arrays(lats, lons, MODELS, FETCH_VARS, per_point, timestamps)
+        del per_point
 
-    print("Fetching Open-Meteo…")
-    per_point, timestamps = fetch_all(points, MODELS, VARIABLES, FORECAST_DAYS, BATCH_SIZE)
-    values, dates = build_values(points, lats, lons, MODELS, VARIABLES, per_point, timestamps)
+    print("Deriving + cleaning fields…")
+    add_derived(arrs, MODELS)
+    missing = clean_arrays(arrs, MODELS, ENC_VARS)
+    for m, vs in missing.items():
+        if vs:
+            print(f"  note: {MODEL_LABELS[m]} provides no data for: {', '.join(vs)}")
 
-    if PRECIP_AGG_HOURS > 1:
-        print(f"Aggregating precipitation into {PRECIP_AGG_HOURS}-hour blocks…")
-        aggregate_precip_3h(values, MODELS, dates, block=PRECIP_AGG_HOURS)
+    print("Exporting grid data…")
+    export_grid_data(out_dir, arrs, MODELS, ENC_VARS)
 
-    ranges = compute_ranges(values, MODELS, VARIABLES, dates)
-
-    # Build the full flat task list up front so we can parallelize cleanly.
-    # Color scale is per date+hour (shared across models) for auto-scaled vars.
-    tasks = []
-    for model in MODELS:
-        for var in VARIABLES:
-            for date in dates:
-                for hour in range(24):
-                    vmin, vmax = ranges[var][date][hour]
-                    field = values[model][var][date][hour]
-                    fname = str(img_dir / f"{model}_{var}_{date}_{hour:02d}.png")
-                    tasks.append((field, var, MODEL_LABELS[model], date, hour, vmin, vmax, fname))
-
-    total = len(tasks)
-    workers = MAX_WORKERS or os.cpu_count() or 4
-    print(f"Rendering {total} high-quality images across {workers} workers…")
-
-    count = 0
-    t0 = time.time()
-    with ProcessPoolExecutor(
-        max_workers=workers,
-        initializer=_init_worker,
-        initargs=(lats, lons, texas_paths, geometry, CITIES, VALUE_ONLY_CITIES, DPI),
-    ) as ex:
-        futures = [ex.submit(_render_task, t) for t in tasks]
-        for fut in as_completed(futures):
-            fut.result()  # surface any worker exceptions
-            count += 1
-            if count % 20 == 0 or count == total:
-                elapsed = time.time() - t0
-                rate = count / elapsed if elapsed > 0 else 0
-                eta = (total - count) / rate if rate > 0 else float("inf")
-                print(f"  {count}/{total} images  ({rate:.1f}/s, ETA {eta:.0f}s)")
-
-    print("Exporting click-probe grid data…")
-    export_grid_data(out_dir, lats, lons, values, MODELS, VARIABLES, dates)
+    var_meta = {}
+    for v in LAYERS:
+        label, unit, decimals, stops, _q, pw = VAR_META[v]
+        var_meta[v] = {"label": label, "unit": unit, "decimals": decimals,
+                       "stops": [[s[0], s[1]] for s in stops], "pow": pw}
 
     payload = {
-        "generated_at": datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d %H:%M"),
+        "generated_at": datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d %H:%M"),
+        "tz": TIMEZONE,
         "models": MODELS,
         "modelLabels": MODEL_LABELS,
-        "variables": VARIABLES,
-        "varMeta": {
-            v: {"label": VAR_META[v]["label"], "unit": VAR_META[v]["unit"]}
-            for v in VARIABLES
-        },
-        "dates": dates,
-        "npoints": len(points),
+        "variables": LAYERS,
+        "dataVars": ENC_VARS,
+        "varMeta": var_meta,
+        "quant": {v: list(QUANT[v]) for v in ENC_VARS},
+        "times": [ts.strftime("%Y-%m-%dT%H:%M") for ts in timestamps],
+        "nlat": len(lats), "nlon": len(lons), "npoints": len(points),
         "bounds": TEXAS_BOUNDS,
+        "mask": [int(x) for x in mask.ravel()],
+        "missing": missing,
+        "cities": [[n, la, lo, *CITY_LABEL_OFFSETS.get(n, (0.0, 0.0))] for n, la, lo in CITIES],
+        "valueOnly": [[n, la, lo] for n, la, lo in VALUE_ONLY_CITIES],
+        "base": base,
+        "hl": {"count": HL_COUNT, "minSep": HL_MIN_SEP_DEG},
     }
-    html = HTML_TEMPLATE.replace("__DATA_JSON__", json.dumps(payload))
+    html = HTML_TEMPLATE.replace("__DATA_JSON__", json.dumps(payload, separators=(",", ":")))
     (out_dir / "index.html").write_text(html, encoding="utf-8")
 
     print(f"\nDone in {time.time() - t0:.0f}s → {out_dir.resolve()}")
-    print(f"Open {out_dir / 'index.html'}")
+    print(f"Open {out_dir / 'index.html'}  (keep grid_data.js next to it)")
 
 
 if __name__ == "__main__":
