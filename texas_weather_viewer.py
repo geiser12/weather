@@ -912,7 +912,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
     <label class="lbl" for="outsideSelect">Outside Texas</label>
     <select id="outsideSelect">
       <option value="show">Show</option>
-      <option value="dim">Dim</option>
+      <option value="dim" selected>Dim</option>
       <option value="hide">Hide</option>
     </select>
   </div>
@@ -923,7 +923,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
     <label><input type="checkbox" id="chkCities" checked> Values</label>
     <label><input type="checkbox" id="chkHL" checked> H/L</label>
   </div>
-  <div><label class="lbl" for="opacityRange">Layer opacity</label><input type="range" id="opacityRange" min="20" max="100" value="85"></div>
+  <div><label class="lbl" for="opacityRange">Layer opacity</label><input type="range" id="opacityRange" min="20" max="100" value="100"></div>
   <div>
     <label class="lbl" for="speedSelect">Speed</label>
     <select id="speedSelect">
@@ -1011,7 +1011,7 @@ DATA.times.forEach((s, t) => {
 let currentVar = VARS[0], tPos = 0, layoutCount = 4;
 let panelModels = MODELS.slice();
 let playing = false, rafId = null, lastFrame = 0, lastOverlayT = -99, hoursPerSec = 1.4;
-const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, outside: "show", opacity: 0.85 };
+const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, outside: "show", opacity: 1 };
 
 /* ── data access ──────────────────────────────────────────────────── */
 function isMissing(model, v) { return (DATA.missing[model] || []).indexOf(v) >= 0; }
@@ -1540,12 +1540,25 @@ modelSelects.forEach((sel, idx) => {
 });
 
 function resizeAll() { let changed = false; for (let i = 0; i < layoutCount; i++) if (panels[i].resize()) changed = true; return changed; }
+const PRESET_3 = (function () {
+  const out = [];
+  [/hrrr/i, /gfs/i, /ecmwf|\bifs\b/i].forEach(re => {
+    const m = MODELS.find(x => !out.includes(x) && (re.test(x) || re.test(MODEL_LABEL(x))));
+    if (m) out.push(m);
+  });
+  MODELS.forEach(m => { if (out.length < 3 && !out.includes(m)) out.push(m); });
+  return out;
+})();
 
 function applyLayout(n) {
+  const prevCount = layoutCount;
   layoutCount = n; mapsEl.className = "layout-" + n;
+  const start = (n === 3 && prevCount !== 3)
+    ? PRESET_3.concat(MODELS.filter(m => !PRESET_3.includes(m)))
+    : panelModels;
   const used = new Set(), next = [];
   for (let i = 0; i < n; i++) {
-    let m = panelModels[i];
+    let m = start[i];
     if (!m || used.has(m)) m = MODELS.find(x => !used.has(x));
     used.add(m); next.push(m);
   }
@@ -1629,6 +1642,7 @@ $("lastUpdated").textContent = "Last updated: " + DATA.generated_at + " CT";
 })();
 dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
 varSelect.value = currentVar; layoutSelect.value = "4";
+outsideSelect.value = "dim"; opacityRange.value = 100;
 new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
 applyLayout(4); drawLegend();
 window.__viewer = { panels: panels, opts: opts, setT: t => { tPos = t; refresh(); }, setVar: v => { currentVar = v; varSelect.value = v; drawLegend(); refresh(); } };
