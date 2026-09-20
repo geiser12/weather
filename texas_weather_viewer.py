@@ -1011,7 +1011,7 @@ DATA.times.forEach((s, t) => {
 let currentVar = VARS[0], tPos = 0, layoutCount = 4;
 let panelModels = MODELS.slice();
 let playing = false, rafId = null, lastFrame = 0, lastOverlayT = -99, hoursPerSec = 1.4;
-const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, outside: "show", opacity: 1 };
+const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, outside: "dim", opacity: 1 };
 
 /* ── data access ──────────────────────────────────────────────────── */
 function isMissing(model, v) { return (DATA.missing[model] || []).indexOf(v) >= 0; }
@@ -1642,7 +1642,18 @@ $("lastUpdated").textContent = "Last updated: " + DATA.generated_at + " CT";
 })();
 dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
 varSelect.value = currentVar; layoutSelect.value = "4";
-outsideSelect.value = "dim"; opacityRange.value = 100;
+dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
+varSelect.value = currentVar; layoutSelect.value = "4";
+
+/* make the controls and the state agree from the very first render */
+outsideSelect.value = "dim";
+opacityRange.value = 100;
+opts.outside = outsideSelect.value;
+opts.opacity = +opacityRange.value / 100;
+
+new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
+applyLayout(4); drawLegend();
+requestAnimationFrame(() => { resizeAll(); renderAll(true); });  /* redraw once layout has settled */
 new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
 applyLayout(4); drawLegend();
 window.__viewer = { panels: panels, opts: opts, setT: t => { tPos = t; refresh(); }, setVar: v => { currentVar = v; varSelect.value = v; drawLegend(); refresh(); } };
