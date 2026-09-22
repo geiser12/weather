@@ -50,9 +50,9 @@ import requests
 # SETTINGS – edit these
 # ============================================================================
 
-SPACING = 0.5                  # grid spacing in degrees (0.5 recommended; 0.75/1.0 = fewer API calls)
+SPACING = 0.75                  # grid spacing in degrees (0.5 recommended; 0.75/1.0 = fewer API calls)
 FORECAST_DAYS = 2              # number of days to fetch
-BATCH_SIZE = 100               # points per API request (lower = safer against rate limits)
+BATCH_SIZE = 250               # points per API request (lower = safer against rate limits)
 OUTPUT_DIR = "tx_model_viewer"
 SLEEP_BETWEEN_BATCHES = 1.8    # seconds between successful API calls
 FETCH_DEADLINE_SECONDS = 600
@@ -898,8 +898,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
     <select id="layoutSelect">
       <option value="1">1 panel</option>
       <option value="2">2 panels</option>
-      <option value="3">3 panels</option>
-      <option value="4" selected>4 panels</option>
+      <option value="3" selected>3 panels</option>
+      <option value="4">4 panels</option>
     </select>
   </div>
   <div id="modelSelects">
@@ -1641,9 +1641,9 @@ $("lastUpdated").textContent = "Last updated: " + DATA.generated_at + " CT";
   tPos = t;
 })();
 dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
-varSelect.value = currentVar; layoutSelect.value = "4";
+varSelect.value = currentVar; layoutSelect.value = "3";
 dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
-varSelect.value = currentVar; layoutSelect.value = "4";
+varSelect.value = currentVar; layoutSelect.value = "3";
 
 /* make the controls and the state agree from the very first render */
 outsideSelect.value = "dim";
@@ -1652,10 +1652,10 @@ opts.outside = outsideSelect.value;
 opts.opacity = +opacityRange.value / 100;
 
 new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
-applyLayout(4); drawLegend();
+applyLayout(3); drawLegend();
 requestAnimationFrame(() => { resizeAll(); renderAll(true); });  /* redraw once layout has settled */
 new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
-applyLayout(4); drawLegend();
+applyLayout(3); drawLegend();
 window.__viewer = { panels: panels, opts: opts, setT: t => { tPos = t; refresh(); }, setVar: v => { currentVar = v; varSelect.value = v; drawLegend(); refresh(); } };
 })();
 </script>
