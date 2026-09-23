@@ -52,7 +52,7 @@ import requests
 
 SPACING = 0.75                  # grid spacing in degrees (0.5 recommended; 0.75/1.0 = fewer API calls)
 FORECAST_DAYS = 2              # number of days to fetch
-BATCH_SIZE = 250               # points per API request (lower = safer against rate limits)
+BATCH_SIZE = 100               # points per API request (lower = safer against rate limits)
 OUTPUT_DIR = "tx_model_viewer"
 SLEEP_BETWEEN_BATCHES = 1.8    # seconds between successful API calls
 FETCH_DEADLINE_SECONDS = 600
