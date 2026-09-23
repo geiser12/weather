@@ -24,6 +24,11 @@ What changed vs. the PNG edition
   * Smooth cross-fade between hours while playing.
   * Correct map aspect ratio (cos(latitude) correction) and click-probe maths.
 
+NEW (this version)
+------------------
+  * USGS USWTDB wind turbine locations overlaid as small black dots when the
+    Wind Speed (80m) layer is selected.
+
 Outputs (in OUTPUT_DIR):  index.html  +  grid_data.js   (works from file://)
 
 Needs:  numpy pandas scipy requests openmeteo_requests requests_cache retry_requests
@@ -50,10 +55,13 @@ import requests
 # SETTINGS – edit these
 # ============================================================================
 
-SPACING = 0.75                  # grid spacing in degrees (0.5 recommended; 0.75/1.0 = fewer API calls)
+SPACING = 0.75                  # map grid only (Open-Meteo). Keep coarse to avoid rate limits.
 FORECAST_DAYS = 2              # number of days to fetch
 BATCH_SIZE = 100               # points per API request (lower = safer against rate limits)
 OUTPUT_DIR = "tx_model_viewer"
+
+# Max forecast hour to pull from a single HRRR cycle (00/06/12/18Z runs go to 48).
+HERBIE_HRRR_MAX_FXX = 48
 SLEEP_BETWEEN_BATCHES = 1.8    # seconds between successful API calls
 FETCH_DEADLINE_SECONDS = 600
 
@@ -72,6 +80,13 @@ HL_MIN_SEP_DEG = 0.9
 BASEMAP_CACHE = Path(".texas_basemap_cache.json")
 BASEMAP_MAX_AGE_DAYS = 30
 BASEMAP_PAD_DEG = 1.0          # geometry is clipped to the map bounds + this pad
+
+# Wind-turbine inventory (USGS USWTDB) – free, no API key, public-repo safe.
+WIND_TURBINES_CACHE = Path(".texas_wind_turbines_cache.json")
+WIND_TURBINES_MAX_AGE_DAYS = 14
+# Optional: set EIA_API_KEY in the environment for future EIA-860 cross-checks.
+# Never hard-code the key; in GitHub Actions store it as a repository secret.
+EIA_API_KEY = os.environ.get("EIA_API_KEY") or os.environ.get("TX_EIA_API_KEY") or ""
 
 # Synthetic data instead of the API (for testing the viewer offline).
 DEMO_MODE = os.environ.get("TX_DEMO", "0") == "1"
@@ -206,6 +221,12 @@ TIGER_URL = ("https://tigerweb.geo.census.gov/arcgis/rest/services/"
              "TIGERweb/State_County/MapServer/15/query")
 NE_LAND_URL = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/"
                "master/geojson/ne_50m_land.geojson")
+
+# USWTDB (USGS) – free, no key. PostgREST-style filters.
+USWTDB_URL = "https://energy.usgs.gov/api/uswtdb/v1/turbines"
+# Alternate base if the primary is flaky:
+# USWTDB_URL = "https://eersc.usgs.gov/api/uswtdb/v1/turbines"
+
 
 
 # ── Grid / fetch helpers ──────────────────────────────────────────────────
@@ -643,6 +664,79 @@ def compute_inside_mask(lats, lons, texas_rings, spacing):
     return inside.reshape(LON.shape)
 
 
+# ── Wind turbines (USWTDB) – map overlay only ─────────────────────────────
+
+def load_wind_turbines():
+    """Fetch / cache Texas utility-scale turbine locations from USWTDB (no API key).
+
+    Returns list of {lat, lon} for map dots when wind speed is selected.
+    """
+    if WIND_TURBINES_CACHE.exists():
+        try:
+            cached = json.loads(WIND_TURBINES_CACHE.read_text())
+            age_days = (time.time() - WIND_TURBINES_CACHE.stat().st_mtime) / 86400
+            turbines = cached.get("turbines") or []
+            if age_days < WIND_TURBINES_MAX_AGE_DAYS and turbines:
+                print(f"  wind turbines: using cache ({len(turbines)} sites)")
+                return turbines
+        except Exception:
+            pass
+
+    print("  wind turbines: downloading USWTDB (Texas)…")
+    turbines = []
+    select = "case_id,ylat,xlong,t_cap,t_state"
+    offset = 0
+    page = 2000
+    b = TEXAS_BOUNDS
+    while True:
+        url = (
+            f"{USWTDB_URL}?t_state=eq.TX&t_cap=gt.0"
+            f"&ylat=gte.{b['min_lat'] - 0.5}&ylat=lte.{b['max_lat'] + 0.5}"
+            f"&xlong=gte.{b['min_lon'] - 0.5}&xlong=lte.{b['max_lon'] + 0.5}"
+            f"&select={select}&limit={page}&offset={offset}"
+        )
+        try:
+            r = requests.get(url, timeout=90, headers={"Accept": "application/json"})
+            r.raise_for_status()
+            batch = r.json()
+        except Exception as e:
+            print(f"  [warn] USWTDB page offset={offset} failed: {e}")
+            break
+        if not batch:
+            break
+        for row in batch:
+            try:
+                lat = float(row["ylat"])
+                lon = float(row["xlong"])
+                if not (b["min_lat"] - 0.3 <= lat <= b["max_lat"] + 0.3):
+                    continue
+                if not (b["min_lon"] - 0.3 <= lon <= b["max_lon"] + 0.3):
+                    continue
+                turbines.append({"lat": round(lat, 5), "lon": round(lon, 5)})
+            except (TypeError, ValueError, KeyError):
+                continue
+        print(f"    … {len(turbines)} turbines so far (offset {offset})")
+        if len(batch) < page:
+            break
+        offset += page
+        time.sleep(0.3)
+
+    if not turbines:
+        print("  [warn] USWTDB returned no turbines")
+        return []
+
+    try:
+        WIND_TURBINES_CACHE.write_text(json.dumps({
+            "fetched_at": datetime.now(ZoneInfo(TIMEZONE)).isoformat(),
+            "n_turbines": len(turbines),
+            "turbines": turbines,
+        }))
+    except Exception:
+        pass
+    print(f"  wind turbines: {len(turbines)} units for map overlay")
+    return turbines
+
+
 # ── Synthetic data (TX_DEMO=1) ────────────────────────────────────────────
 
 def make_demo_data(lats, lons, models):
@@ -704,6 +798,10 @@ header {
 }
 .title { font-size: 17px; font-weight: 650; }
 .subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+
+.tab-btn:hover { color: var(--text); }
+
 .controls {
   flex: none; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 14px;
   padding: 8px 18px; background: #151e29; border-bottom: 1px solid var(--border);
@@ -741,6 +839,14 @@ select:focus-visible, button:focus-visible, input:focus-visible { outline: 2px s
 .mapbox { position: relative; flex: none; cursor: crosshair; }
 .mapbox canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
 
+
+
+
+
+
+#windMeta strong { color: var(--text); font-weight: 600; }
+#windNote { font-size: 11px; color: var(--muted); max-width: 720px; line-height: 1.4; }
+
 .legend {
   flex: none; height: 44px; padding: 4px 18px 0; background: var(--panel);
   border-top: 1px solid var(--border); display: flex; align-items: center; gap: 14px;
@@ -768,13 +874,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
 /* ── Mobile / narrow screens ─────────────────────────────────────── */
 @media (max-width: 768px) {
   html, body {
-    overflow: auto;                 /* allow vertical scroll */
+    overflow: auto;
     height: auto;
     min-height: 100%;
   }
-  body {
-    display: block;                 /* drop the flex column that was locking heights */
-  }
+  body { display: block; }
 
   header {
     height: auto;
@@ -788,12 +892,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   .controls {
     padding: 8px 12px;
     gap: 8px 10px;
-    /* keep flex-wrap; just give it room to grow */
   }
-  .controls > div {
-    min-width: 0;
-  }
-  /* Make the four model selects stack nicer */
+  .controls > div { min-width: 0; }
   #modelSelects {
     flex-wrap: wrap;
     width: 100%;
@@ -809,18 +909,18 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   }
   #opacityRange { width: 70px; }
 
-  /* Maps area – give it a sensible minimum height so it doesn't collapse */
   #maps {
-    min-height: 52vh;               /* keeps maps visible */
+    min-height: 52vh;
     height: 52vh;
   }
   #maps.layout-2,
   #maps.layout-3,
   #maps.layout-4 {
-    grid-template-columns: 1fr;     /* single column on phones */
+    grid-template-columns: 1fr;
     grid-template-rows: repeat(auto-fit, minmax(180px, 1fr));
   }
-  /* When user picks 1-panel it already looks good */
+
+  
 
   .legend {
     height: auto;
@@ -844,28 +944,21 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   #timeLabel { font-size: 12px; }
   .hour-ticks { font-size: 8px; padding: 0 6px; }
 
-  /* Probe needs a bit more room on small screens */
   #probe {
     max-width: min(290px, 92vw);
     font-size: 11px;
   }
 
-  /* Hide the least-critical desktop-only hint */
   #probeHint { display: none; }
 }
 
-/* Extra-small phones */
 @media (max-width: 420px) {
-  .controls {
-    gap: 6px 8px;
-  }
+  .controls { gap: 6px 8px; }
   select, button {
     padding: 5px 8px;
     font-size: 11px;
   }
-  .model-select-wrap {
-    flex: 1 1 100%;
-  }
+  .model-select-wrap { flex: 1 1 100%; }
   #maps {
     min-height: 46vh;
     height: 46vh;
@@ -890,7 +983,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   <div id="lastUpdated" style="font-size:11px; color:var(--muted);"></div>
 </header>
 
-<div class="controls">
+<div class="controls" id="mapControls">
   <div><label class="lbl" for="dateSelect">Date</label><select id="dateSelect"></select></div>
   <div><label class="lbl" for="varSelect">Variable</label><select id="varSelect"></select></div>
   <div>
@@ -922,6 +1015,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
     <label><input type="checkbox" id="chkIsot"> Isotherms</label>
     <label><input type="checkbox" id="chkCities" checked> Values</label>
     <label><input type="checkbox" id="chkHL" checked> H/L</label>
+    <label><input type="checkbox" id="chkFarms"> Wind farms</label>
   </div>
   <div><label class="lbl" for="opacityRange">Layer opacity</label><input type="range" id="opacityRange" min="20" max="100" value="100"></div>
   <div>
@@ -943,9 +1037,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   <div class="panel" id="panel3"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
 </div>
 
-<div class="legend"><span id="legendLabel"></span><canvas id="legend"></canvas></div>
+<div class="legend" id="mapLegend"><span id="legendLabel"></span><canvas id="legend"></canvas></div>
 
-<div class="timeline">
+<div class="timeline" id="mapTimeline">
   <span id="timeLabel"></span>
   <div>
     <input type="range" id="hourSlider" min="0" max="23" value="12" step="1" aria-label="Hour">
@@ -998,6 +1092,7 @@ const probeEl = $("probe"), mapsEl = $("maps"), legendCv = $("legend"), legendLa
 const speedSelect = $("speedSelect"), outsideSelect = $("outsideSelect"), opacityRange = $("opacityRange");
 const modelSelects = [0,1,2,3].map(i => $("modelSelect" + i));
 const modelWraps = [0,1,2,3].map(i => $("modelWrap" + i));
+const mapControls = $("mapControls"), mapLegend = $("mapLegend"), mapTimeline = $("mapTimeline");
 
 /* timeline */
 const dates = [], dayIdx = {}, DATE_OF = [], HOUR_OF = [];
@@ -1011,7 +1106,7 @@ DATA.times.forEach((s, t) => {
 let currentVar = VARS[0], tPos = 0, layoutCount = 4;
 let panelModels = MODELS.slice();
 let playing = false, rafId = null, lastFrame = 0, lastOverlayT = -99, hoursPerSec = 1.4;
-const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, outside: "dim", opacity: 1 };
+const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, farms: false, outside: "dim", opacity: 1 };
 
 /* ── data access ──────────────────────────────────────────────────── */
 function isMissing(model, v) { return (DATA.missing[model] || []).indexOf(v) >= 0; }
@@ -1409,6 +1504,16 @@ class Panel {
     ctx.beginPath(); tracePath(ctx, BASE.texas, X, Y);
     ctx.lineJoin = "round"; ctx.lineWidth = 1.1; ctx.strokeStyle = "rgba(24,32,44,0.9)"; ctx.stroke();
 
+    /* USWTDB wind turbines — small grey dots when "Wind farms" is checked */
+    if (opts.farms && DATA.windFarms && DATA.windFarms.length) {
+      ctx.fillStyle = "rgba(90,90,90,0.85)";  /* grey; change here for color */
+      for (const p of DATA.windFarms) {
+        const px = X(p[1]), py = Y(p[0]);
+        if (px < -2 || px > W + 2 || py < -2 || py > H + 2) continue;
+        ctx.fillRect(px - 0.75, py - 0.75, 1.5, 1.5);
+      }
+    }
+
     if (this.missing) {
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       haloText(ctx, MODEL_LABEL(model) + " does not provide", W / 2, H / 2 - 9, "600 13px " + FONT, "#111");
@@ -1506,6 +1611,7 @@ function syncUI() {
 }
 
 function renderAll(forceOverlay) {
+  
   const doOverlay = forceOverlay || Math.abs(tPos - lastOverlayT) >= 0.25;
   if (doOverlay) lastOverlayT = tPos;
   for (let i = 0; i < layoutCount; i++) panels[i].render(panelModels[i], currentVar, tPos, doOverlay);
@@ -1518,13 +1624,20 @@ function frame(ts) {
     tPos += dt * hoursPerSec; if (tPos > T - 1) tPos = 0;
     syncUI(); renderAll(false);
   }
-  for (let i = 0; i < layoutCount; i++) panels[i].stepFlow();
+  if (true) {
+    for (let i = 0; i < layoutCount; i++) panels[i].stepFlow();
+  }
   if (playing || opts.flow) rafId = requestAnimationFrame(frame);
 }
 function ensureLoop() {
-  if (!rafId && (playing || opts.flow)) { lastFrame = performance.now(); rafId = requestAnimationFrame(frame); }
+  if (!rafId && (playing || opts.flow)) {
+    lastFrame = performance.now(); rafId = requestAnimationFrame(frame);
+  }
 }
 function refresh() { syncUI(); renderAll(true); ensureLoop(); hideProbe(); }
+
+/* ── tabs ─────────────────────────────────────────────────────────── */
+
 
 /* ── UI wiring ────────────────────────────────────────────────────── */
 dates.forEach(d => { const o = document.createElement("option"); o.value = d; o.textContent = d; dateSelect.appendChild(o); });
@@ -1570,13 +1683,24 @@ function applyLayout(n) {
 }
 
 dateSelect.onchange = e => { const d = e.target.value, ix = dayIdx[d]; hourSlider.max = ix.length - 1; tPos = ix[Math.min(12, ix.length - 1)]; refresh(); };
-varSelect.onchange = e => { currentVar = e.target.value; drawLegend(); refresh(); };
+varSelect.onchange = e => {
+  currentVar = e.target.value;
+  /* default Wind farms on only when Wind Speed is selected; user can still toggle */
+  const farmsEl = $("chkFarms");
+  if (farmsEl) {
+    const want = currentVar === "wind_speed_80m";
+    farmsEl.checked = want;
+    opts.farms = want;
+  }
+  drawLegend();
+  refresh();
+};
 layoutSelect.onchange = e => applyLayout(+e.target.value);
 hourSlider.oninput = e => { tPos = dayIdx[DATE_OF[curT()]][0] + (+e.target.value); refresh(); };
 speedSelect.onchange = e => { hoursPerSec = +e.target.value; };
 outsideSelect.onchange = e => { opts.outside = e.target.value; renderAll(true); };
 opacityRange.oninput = e => { opts.opacity = +e.target.value / 100; renderAll(false); };
-[["chkFlow","flow"],["chkIso","iso"],["chkIsot","isot"],["chkCities","cities"],["chkHL","hl"]].forEach(([id, k]) => {
+[["chkFlow","flow"],["chkIso","iso"],["chkIsot","isot"],["chkCities","cities"],["chkHL","hl"],["chkFarms","farms"]].forEach(([id, k]) => {
   $(id).onchange = e => {
     opts[k] = e.target.checked;
     if (k === "flow" && !opts.flow) panels.forEach(p => { p.flowReady = false; p.clearFlow(); });
@@ -1642,20 +1766,18 @@ $("lastUpdated").textContent = "Last updated: " + DATA.generated_at + " CT";
 })();
 dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
 varSelect.value = currentVar; layoutSelect.value = "3";
-dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
-varSelect.value = currentVar; layoutSelect.value = "3";
 
-/* make the controls and the state agree from the very first render */
 outsideSelect.value = "dim";
 opacityRange.value = 100;
 opts.outside = outsideSelect.value;
 opts.opacity = +opacityRange.value / 100;
 
-new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
+new ResizeObserver(() => {
+  if (resizeAll()) renderAll(true); drawLegend();
+}).observe(mapsEl);
+
 applyLayout(3); drawLegend();
-requestAnimationFrame(() => { resizeAll(); renderAll(true); });  /* redraw once layout has settled */
-new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
-applyLayout(3); drawLegend();
+requestAnimationFrame(() => { resizeAll(); renderAll(true); });
 window.__viewer = { panels: panels, opts: opts, setT: t => { tPos = t; refresh(); }, setVar: v => { currentVar = v; varSelect.value = v; drawLegend(); refresh(); } };
 })();
 </script>
@@ -1678,6 +1800,9 @@ def main():
     texas_rings = [np.array(r, dtype=float).reshape(-1, 2) for r in base["texas"]]
     mask = compute_inside_mask(lats, lons, texas_rings, SPACING)
     print(f"  {int(mask.sum())} of {mask.size} grid cells fall inside Texas")
+
+    print("Wind turbine inventory (USWTDB)…")
+    turbines = load_wind_turbines()
 
     if DEMO_MODE:
         print("DEMO MODE: generating synthetic data (no API calls)…")
@@ -1703,6 +1828,9 @@ def main():
         var_meta[v] = {"label": label, "unit": unit, "decimals": decimals,
                        "stops": [[s[0], s[1]] for s in stops], "pow": pw}
 
+    # Compact turbine list for map dots: [lat, lon, ...]
+    wind_farms = [[t["lat"], t["lon"]] for t in turbines]
+
     payload = {
         "generated_at": datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d %H:%M"),
         "tz": TIMEZONE,
@@ -1721,12 +1849,14 @@ def main():
         "valueOnly": [[n, la, lo] for n, la, lo in VALUE_ONLY_CITIES],
         "base": base,
         "hl": {"count": HL_COUNT, "minSep": HL_MIN_SEP_DEG},
+        "windFarms": wind_farms,
     }
     html = HTML_TEMPLATE.replace("__DATA_JSON__", json.dumps(payload, separators=(",", ":")))
     (out_dir / "index.html").write_text(html, encoding="utf-8")
 
     print(f"\nDone in {time.time() - t0:.0f}s → {out_dir.resolve()}")
     print(f"Open {out_dir / 'index.html'}  (keep grid_data.js next to it)")
+    print(f"Wind farms on map: {len(wind_farms)} USWTDB turbines (shown when Wind Speed selected)")
 
 
 if __name__ == "__main__":
