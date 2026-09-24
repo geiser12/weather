@@ -1897,8 +1897,7 @@ function drawWindChart() {
   const allVals = [];
   for (const n of names) for (const v of (wf.series[n] || [])) if (v != null && Number.isFinite(v)) allVals.push(v);
   const cap = Number(wf.fleetCapacityMw) || 0;
-  const dataMax = allVals.length ? Math.max(...allVals) : 0;
-  const ymax = Math.max(dataMax + 2000, 100);
+  const ymax = Math.max(100, cap, allVals.length ? Math.max(...allVals) : 100) * 1.05;
   const y = v => top + h - (v / ymax) * h;
 
   ctx.font = "9px " + FONT; ctx.textAlign = "right"; ctx.textBaseline = "middle";
@@ -1946,6 +1945,30 @@ function drawWindChart() {
     }
     ctx.stroke();
   });
+
+  /* Vertical marker: maps' currently selected hour */
+  (function drawMapHourMarker() {
+    const mapT = (typeof curT === "function") ? curT() : Math.round(tPos);
+    const mapKey = (DATA.times && DATA.times[mapT]) || null;
+    if (!mapKey) return;
+    let mi = times.indexOf(mapKey);
+    if (mi < 0) {
+      const prefix = mapKey.slice(0, 13);
+      mi = times.findIndex(s => s.slice(0, 13) === prefix);
+    }
+    if (mi < 0) return;
+    const xx = windChartX(mi, n, left, w);
+    ctx.save();
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = "rgba(160,170,180,0.85)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(xx, top);
+    ctx.lineTo(xx, top + h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  })();
 
   if (windChartState.hover >= 0 && windChartState.hover < n) {
     const i = windChartState.hover, xx = windChartX(i, n, left, w);
@@ -2061,6 +2084,7 @@ function frame(ts) {
   if (playing) {
     tPos += dt * hoursPerSec; if (tPos > T - 1) tPos = 0;
     syncUI(); renderAll(false);
+    if (windDock.classList.contains("on")) drawWindChart();
   }
   for (let i = 0; i < layoutCount; i++) panels[i].stepFlow();
   if (playing || opts.flow) rafId = requestAnimationFrame(frame);
@@ -2068,7 +2092,10 @@ function frame(ts) {
 function ensureLoop() {
   if (!rafId && (playing || opts.flow)) { lastFrame = performance.now(); rafId = requestAnimationFrame(frame); }
 }
-function refresh() { syncUI(); renderAll(true); ensureLoop(); hideProbe(); }
+function refresh() {
+  syncUI(); renderAll(true); ensureLoop(); hideProbe();
+  if (windDock.classList.contains("on")) drawWindChart();
+}
 
 /* ── UI wiring ────────────────────────────────────────────────────── */
 dates.forEach(d => { const o = document.createElement("option"); o.value = d; o.textContent = d; dateSelect.appendChild(o); });
