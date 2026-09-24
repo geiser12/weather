@@ -63,6 +63,28 @@ DEMO_MODE = os.environ.get("TX_DEMO", "0") == "1"
 # needs to be true - re-run with --refresh-fleet or set the env var below.
 WIND_FLEET_FORCE_REFRESH = os.environ.get("TX_REFRESH_FLEET", "0") == "1"
 
+# Approximate ERCOT footprint for the USWTDB TX fleet. Full Texas includes
+# SPP (northern panhandle / NE corner) and WECC (El Paso) wind that is NOT
+# in ERCOT STWPF. Tune ERCOT_MAX_LAT if needed.
+ERCOT_FILTER_FLEET = True
+ERCOT_MAX_LAT = 35.857927          # drop farms north of this (SPP panhandle)
+ERCOT_MIN_LON = -105.0             # drop far-west / El Paso (WECC)
+# Counties typically outside ERCOT (SPP / WECC). Applied when county is present.
+ERCOT_EXCLUDE_COUNTIES = {
+    # Northern panhandle / SPP
+    "dallam", "sherman", "hansford", "ochiltree", "lipscomb",
+    "hartley", "moore", "hutchinson", "roberts", "hemphill",
+    "oldham", "potter", "carson", "gray", "wheeler",
+    "deaf smith", "randall", "armstrong", "donley", "collingsworth",
+    "parmer", "castro", "swisher", "briscoe", "hall", "childress",
+    # Far northeast SPP
+    "bowie", "cass", "marion", "morris", "titus", "camp",
+    "upshur", "gregg", "harrison", "panola", "shelby",
+    "san augustine", "sabine",
+    # Far west WECC
+    "el paso", "hudspeth",
+}
+
 # ============================================================================
 
 TEXAS_BOUNDS = {"min_lat": 25.7, "max_lat": 36.6, "min_lon": -106.7, "max_lon": -93.4}
@@ -530,22 +552,96 @@ def _scrape_latest_ercot_stwpf():
         return pd.DataFrame()
 
 
-def _wind_farm_points(fleet):
-    """Convert cached TX wind-farm list into map-ready farm points."""
+def _fleet_as_farm_list(fleet):
+    """Normalize fleet (list / dict / DataFrame) to a list of farm dicts."""
     if fleet is None:
         return []
-
-    # wind_fleet_tx.json stores farms as a list of dictionaries
     if isinstance(fleet, list):
-        farms = fleet
-    elif isinstance(fleet, dict):
-        # Handle either {"farms": [...]} or a direct farm dictionary
-        farms = fleet.get("farms", [])
+        return [f for f in fleet if isinstance(f, dict)]
+    if isinstance(fleet, dict):
+        farms = fleet.get("farms", fleet)
         if isinstance(farms, dict):
             farms = list(farms.values())
-    elif isinstance(fleet, pd.DataFrame):
-        farms = fleet.to_dict("records")
-    else:
+        return [f for f in farms if isinstance(f, dict)]
+    if isinstance(fleet, pd.DataFrame):
+        return fleet.to_dict("records")
+    return []
+
+
+def _farm_lat_lon_county(farm):
+    lookup = {str(k).strip().lower(): v for k, v in farm.items()}
+
+    def get_value(*names):
+        for name in names:
+            if name.lower() in lookup:
+                return lookup[name.lower()]
+        return None
+
+    lat = get_value("lat", "latitude")
+    lon = get_value("lon", "longitude", "lng")
+    county = get_value("county", "county_name")
+    try:
+        lat = float(lat) if lat is not None else None
+        lon = float(lon) if lon is not None else None
+    except (TypeError, ValueError):
+        lat = lon = None
+    county_key = str(county).strip().lower() if county is not None else ""
+    # strip trailing " county"
+    if county_key.endswith(" county"):
+        county_key = county_key[: -len(" county")]
+    return lat, lon, county_key
+
+
+def _farm_in_ercot(lat, lon, county_key):
+    """Approximate ERCOT membership for a TX wind farm."""
+    if lat is None or lon is None:
+        return False
+    if ERCOT_MAX_LAT is not None and lat > ERCOT_MAX_LAT:
+        return False
+    if ERCOT_MIN_LON is not None and lon < ERCOT_MIN_LON:
+        return False
+    if county_key and county_key in ERCOT_EXCLUDE_COUNTIES:
+        return False
+    return True
+
+
+def filter_fleet_ercot(fleet):
+    """Drop non-ERCOT TX farms (SPP panhandle / NE, WECC El Paso).
+
+    Returns a list of farm dicts suitable for capacity / MW / map points.
+    """
+    farms = _fleet_as_farm_list(fleet)
+    if not ERCOT_FILTER_FLEET:
+        return farms
+
+    kept, dropped = [], []
+    dropped_mw = 0.0
+    for farm in farms:
+        lat, lon, county = _farm_lat_lon_county(farm)
+        if _farm_in_ercot(lat, lon, county):
+            kept.append(farm)
+        else:
+            dropped.append(farm)
+            lookup = {str(k).strip().lower(): v for k, v in farm.items()}
+            for key in ("capacity_mw", "capacity", "mw", "nameplate_capacity_mw"):
+                if key in lookup:
+                    try:
+                        dropped_mw += float(lookup[key] or 0)
+                    except (TypeError, ValueError):
+                        pass
+                    break
+
+    print(
+        f"  ERCOT fleet filter: kept {len(kept)}/{len(farms)} farms "
+        f"(dropped {len(dropped)} farms / ~{dropped_mw:,.0f} MW outside ERCOT footprint)"
+    )
+    return kept
+
+
+def _wind_farm_points(fleet):
+    """Convert cached TX wind-farm list into map-ready farm points."""
+    farms = _fleet_as_farm_list(fleet)
+    if not farms:
         return []
 
     points = []
@@ -622,7 +718,23 @@ def build_wind_forecast_payload(arrs, lats, lons, timestamps, models):
         print(f"  [warn] could not load wind fleet ({e}); wind chart will be empty")
         return None
 
-    total_cap = fleet_total_capacity_mw(fleet)
+    # Restrict to approximate ERCOT footprint (not all of Texas).
+    fleet = filter_fleet_ercot(fleet)
+
+    try:
+        total_cap = fleet_total_capacity_mw(fleet)
+    except Exception:
+        # Fallback if the helper expects a different shape after filtering.
+        total_cap = 0.0
+        for f in _fleet_as_farm_list(fleet):
+            lookup = {str(k).strip().lower(): v for k, v in f.items()}
+            for key in ("capacity_mw", "capacity", "mw", "nameplate_capacity_mw"):
+                if key in lookup:
+                    try:
+                        total_cap += float(lookup[key] or 0)
+                    except (TypeError, ValueError):
+                        pass
+                    break
 
     # Open-Meteo is the authoritative forecast window
     weather_dt = pd.DatetimeIndex(pd.to_datetime(timestamps))
