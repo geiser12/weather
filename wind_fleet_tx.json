@@ -1,0 +1,3366 @@
+{
+  "fetched_at": 1790256501.6693654,
+  "source": "USWTDB",
+  "farms": [
+    {
+      "name": "Aviator Wind",
+      "county": "Coke County",
+      "lat": 31.809765602094245,
+      "lon": -100.642932460733,
+      "capacity_mw": 525.02,
+      "turbine_count": 191,
+      "avg_hub_height_m": 89.7,
+      "online_year": 2020
+    },
+    {
+      "name": "White Mesa",
+      "county": "Crockett County",
+      "lat": 30.909328111111112,
+      "lon": -101.27455705555559,
+      "capacity_mw": 507.6,
+      "turbine_count": 180,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2021
+    },
+    {
+      "name": "Young Wind Project",
+      "county": "Young County",
+      "lat": 33.12646807909606,
+      "lon": -98.86343666666666,
+      "capacity_mw": 499.14,
+      "turbine_count": 177,
+      "avg_hub_height_m": 114.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Maverick Creek",
+      "county": "Concho County",
+      "lat": 31.26292134920635,
+      "lon": -99.8452292063492,
+      "capacity_mw": 488.3,
+      "turbine_count": 126,
+      "avg_hub_height_m": 102.3,
+      "online_year": 2020
+    },
+    {
+      "name": "Hale Wind",
+      "county": "Hale County",
+      "lat": 33.95008861924685,
+      "lon": -101.65079623430967,
+      "capacity_mw": 478.0,
+      "turbine_count": 239,
+      "avg_hub_height_m": 92.7,
+      "online_year": 2019
+    },
+    {
+      "name": "Mesquite Star",
+      "county": "Fisher County",
+      "lat": 32.58445932203389,
+      "lon": -100.55880830508474,
+      "capacity_mw": 418.9,
+      "turbine_count": 118,
+      "avg_hub_height_m": 101.5,
+      "online_year": 2020
+    },
+    {
+      "name": "Great Prairie Wind 1",
+      "county": "Hansford County",
+      "lat": 36.313793984375,
+      "lon": -101.49907531249997,
+      "capacity_mw": 360.96,
+      "turbine_count": 128,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Foard City",
+      "county": "Foard County",
+      "lat": 33.91062129496404,
+      "lon": -99.74189100719425,
+      "capacity_mw": 350.28,
+      "turbine_count": 139,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Azure Sky Wind Project",
+      "county": "Throckmorton County",
+      "lat": 33.168418860759495,
+      "lon": -99.29152607594935,
+      "capacity_mw": 350.15,
+      "turbine_count": 79,
+      "avg_hub_height_m": 103.2,
+      "online_year": 2022
+    },
+    {
+      "name": "Mesquite Sky",
+      "county": "Callahan County",
+      "lat": 32.458454117647044,
+      "lon": -99.4934819117647,
+      "capacity_mw": 340.0,
+      "turbine_count": 68,
+      "avg_hub_height_m": 90.0,
+      "online_year": 2021
+    },
+    {
+      "name": "Escalade",
+      "county": "Knox County",
+      "lat": 33.74126630769231,
+      "lon": -99.64845046153847,
+      "capacity_mw": 336.0,
+      "turbine_count": 65,
+      "avg_hub_height_m": 119.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Capricorn Ridge",
+      "county": "Sterling County",
+      "lat": 31.938607796610167,
+      "lon": -100.91261638418081,
+      "capacity_mw": 317.5,
+      "turbine_count": 177,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Canyon Wind",
+      "county": "Scurry County",
+      "lat": 32.615920810810806,
+      "lon": -100.96934036036036,
+      "capacity_mw": 308.82,
+      "turbine_count": 111,
+      "avg_hub_height_m": 111.0,
+      "online_year": 2024
+    },
+    {
+      "name": "Santa Rita East",
+      "county": "Irion County",
+      "lat": 31.246612166666676,
+      "lon": -101.13911316666666,
+      "capacity_mw": 302.4,
+      "turbine_count": 120,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Priddy",
+      "county": "Mills County",
+      "lat": 31.57665492063492,
+      "lon": -98.48461761904763,
+      "capacity_mw": 302.4,
+      "turbine_count": 63,
+      "avg_hub_height_m": 108.0,
+      "online_year": 2022
+    },
+    {
+      "name": "King Creek 1",
+      "county": "Throckmorton County",
+      "lat": 33.24377610389611,
+      "lon": -99.40975584415582,
+      "capacity_mw": 301.6,
+      "turbine_count": 77,
+      "avg_hub_height_m": 99.0,
+      "online_year": 2022
+    },
+    {
+      "name": "El Sauz Ranch",
+      "county": "Willacy County",
+      "lat": 26.527283582089556,
+      "lon": -97.60216388059699,
+      "capacity_mw": 301.5,
+      "turbine_count": 67,
+      "avg_hub_height_m": 108.0,
+      "online_year": 2025
+    },
+    {
+      "name": "South Plains II",
+      "county": "Floyd County",
+      "lat": 34.20573186813186,
+      "lon": -101.36659714285712,
+      "capacity_mw": 300.3,
+      "turbine_count": 91,
+      "avg_hub_height_m": 91.5,
+      "online_year": 2016
+    },
+    {
+      "name": "Tahoka Wind",
+      "county": "Lynn County",
+      "lat": 33.15588458333334,
+      "lon": -101.69159958333331,
+      "capacity_mw": 300.0,
+      "turbine_count": 120,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Ranchero",
+      "county": "Crockett County",
+      "lat": 31.015416583333334,
+      "lon": -101.71863783333335,
+      "capacity_mw": 300.0,
+      "turbine_count": 120,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Jumbo Road",
+      "county": "Castro County",
+      "lat": 34.71226493827159,
+      "lon": -102.2493125925926,
+      "capacity_mw": 299.7,
+      "turbine_count": 162,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Capricorn Ridge expansion",
+      "county": "Sterling County",
+      "lat": 31.932259644670054,
+      "lon": -100.96459923857866,
+      "capacity_mw": 295.5,
+      "turbine_count": 197,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "King Mtn. Wind Ranch",
+      "county": "Upton County",
+      "lat": 31.24336239436618,
+      "lon": -102.21323220657281,
+      "capacity_mw": 276.9,
+      "turbine_count": 213,
+      "avg_hub_height_m": 60.0,
+      "online_year": 2001
+    },
+    {
+      "name": "Bethel",
+      "county": "Castro County",
+      "lat": 34.57434941666669,
+      "lon": -102.46911741666668,
+      "capacity_mw": 276.0,
+      "turbine_count": 120,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Las Majadas",
+      "county": "Willacy County",
+      "lat": 26.36484792,
+      "lon": -97.54534639999999,
+      "capacity_mw": 273.6,
+      "turbine_count": 125,
+      "avg_hub_height_m": 91.3,
+      "online_year": 2021
+    },
+    {
+      "name": "Big Sampson Wind",
+      "county": "Crockett County",
+      "lat": 30.97252833333333,
+      "lon": -101.84177283333334,
+      "capacity_mw": 270.0,
+      "turbine_count": 60,
+      "avg_hub_height_m": 98.0,
+      "online_year": 2025
+    },
+    {
+      "name": "Helena Wind",
+      "county": "Bee County",
+      "lat": 28.619266212121218,
+      "lon": -97.94064045454542,
+      "capacity_mw": 264.0,
+      "turbine_count": 66,
+      "avg_hub_height_m": 105.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Santa Rita",
+      "county": "Reagan County",
+      "lat": 31.193056952380942,
+      "lon": -101.36828390476187,
+      "capacity_mw": 262.5,
+      "turbine_count": 105,
+      "avg_hub_height_m": 90.0,
+      "online_year": 2018
+    },
+    {
+      "name": "High Lonesome",
+      "county": "Upton County",
+      "lat": 31.14209935064936,
+      "lon": -101.93016493506492,
+      "capacity_mw": 259.94,
+      "turbine_count": 77,
+      "avg_hub_height_m": 84.7,
+      "online_year": 2019
+    },
+    {
+      "name": "Prairie Hill",
+      "county": "Limestone County",
+      "lat": 31.593342209302328,
+      "lon": -96.79526441860466,
+      "capacity_mw": 258.0,
+      "turbine_count": 86,
+      "avg_hub_height_m": 82.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Ranchland Wind Project",
+      "county": "Callahan County",
+      "lat": 32.28251483870968,
+      "lon": -99.17377854838709,
+      "capacity_mw": 256.92,
+      "turbine_count": 62,
+      "avg_hub_height_m": 103.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Goodnight I",
+      "county": "Armstrong County",
+      "lat": 35.05094175438596,
+      "lon": -101.32458070175437,
+      "capacity_mw": 256.5,
+      "turbine_count": 57,
+      "avg_hub_height_m": 82.0,
+      "online_year": 2023
+    },
+    {
+      "name": "Amazon Wind Farm Texas",
+      "county": "Scurry County",
+      "lat": 32.89249990909091,
+      "lon": -100.98864918181818,
+      "capacity_mw": 253.0,
+      "turbine_count": 110,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Willow Springs Wind Farm",
+      "county": "Haskell County",
+      "lat": 33.3413951,
+      "lon": -99.64713229999995,
+      "capacity_mw": 250.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 90.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Javelina",
+      "county": "Webb County",
+      "lat": 27.33474761904761,
+      "lon": -98.98859904761906,
+      "capacity_mw": 249.69,
+      "turbine_count": 126,
+      "avg_hub_height_m": 92.8,
+      "online_year": 2015
+    },
+    {
+      "name": "Chapman Ranch",
+      "county": "Nueces County",
+      "lat": 27.598882592592584,
+      "lon": -97.53454666666664,
+      "capacity_mw": 249.07,
+      "turbine_count": 81,
+      "avg_hub_height_m": 87.5,
+      "online_year": 2017
+    },
+    {
+      "name": "Peyton Creek II",
+      "county": "Matagorda County",
+      "lat": 28.909119444444446,
+      "lon": -95.8712540740741,
+      "capacity_mw": 243.0,
+      "turbine_count": 54,
+      "avg_hub_height_m": 112.0,
+      "online_year": 2025
+    },
+    {
+      "name": "El Campo",
+      "county": "Knox County",
+      "lat": 33.73244895522388,
+      "lon": -99.74158447761194,
+      "capacity_mw": 242.8,
+      "turbine_count": 67,
+      "avg_hub_height_m": 102.5,
+      "online_year": 2020
+    },
+    {
+      "name": "Coyote",
+      "county": "Scurry County",
+      "lat": 32.85264084745763,
+      "lon": -100.86571101694913,
+      "capacity_mw": 242.56,
+      "turbine_count": 59,
+      "avg_hub_height_m": 102.4,
+      "online_year": 2021
+    },
+    {
+      "name": "Monte Cristo 1 Wind",
+      "county": "Hidalgo County",
+      "lat": 26.460407735849063,
+      "lon": -98.29145132075476,
+      "capacity_mw": 238.5,
+      "turbine_count": 53,
+      "avg_hub_height_m": 113.0,
+      "online_year": 2025
+    },
+    {
+      "name": "Karankawa",
+      "county": "San Patricio County",
+      "lat": 28.12619189473684,
+      "lon": -97.75215242105261,
+      "capacity_mw": 238.14,
+      "turbine_count": 95,
+      "avg_hub_height_m": 89.1,
+      "online_year": 2019
+    },
+    {
+      "name": "Rio Bravo",
+      "county": "Starr County",
+      "lat": 26.63651454545454,
+      "lon": -99.03859287878788,
+      "capacity_mw": 237.6,
+      "turbine_count": 66,
+      "avg_hub_height_m": 105.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Great Prairie Wind 3",
+      "county": "Hansford County",
+      "lat": 36.44236650602408,
+      "lon": -101.5245431325301,
+      "capacity_mw": 234.06,
+      "turbine_count": 83,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Buffalo Gap 2",
+      "county": "Nolan County",
+      "lat": 32.342343806451616,
+      "lon": -100.21195748387096,
+      "capacity_mw": 232.5,
+      "turbine_count": 155,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Mariah North Wind",
+      "county": "Parmer County",
+      "lat": 34.71607427083334,
+      "lon": -102.71050822916669,
+      "capacity_mw": 230.4,
+      "turbine_count": 96,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Electra Wind",
+      "county": "Wilbarger County",
+      "lat": 34.112216799999985,
+      "lon": -99.07437629999998,
+      "capacity_mw": 230.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Western Trail",
+      "county": "Wilbarger County",
+      "lat": 33.866049999999994,
+      "lon": -99.07247950617283,
+      "capacity_mw": 228.42,
+      "turbine_count": 81,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2021
+    },
+    {
+      "name": "Bruenning's Breeze",
+      "county": "Willacy County",
+      "lat": 26.522558421052626,
+      "lon": -97.67513447368422,
+      "capacity_mw": 228.0,
+      "turbine_count": 76,
+      "avg_hub_height_m": 87.5,
+      "online_year": 2017
+    },
+    {
+      "name": "Patriot Wind",
+      "county": "Nueces County",
+      "lat": 27.59564873015873,
+      "lon": -97.63659841269843,
+      "capacity_mw": 226.05,
+      "turbine_count": 63,
+      "avg_hub_height_m": 82.4,
+      "online_year": 2019
+    },
+    {
+      "name": "Inertia Wind Project",
+      "county": "Haskell County",
+      "lat": 33.19120086419754,
+      "lon": -99.59795481481484,
+      "capacity_mw": 225.72,
+      "turbine_count": 81,
+      "avg_hub_height_m": 111.2,
+      "online_year": 2023
+    },
+    {
+      "name": "Shamrock Wind Facility (White Mesa Wind III)",
+      "county": "Crockett County",
+      "lat": 30.94235975308643,
+      "lon": -101.58940691358023,
+      "capacity_mw": 223.92,
+      "turbine_count": 81,
+      "avg_hub_height_m": 111.0,
+      "online_year": 2023
+    },
+    {
+      "name": "Horse Hollow III",
+      "county": "Nolan County",
+      "lat": 32.27608422818793,
+      "lon": -100.27606597315439,
+      "capacity_mw": 223.5,
+      "turbine_count": 149,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Sage Draw",
+      "county": "Lynn County",
+      "lat": 33.315395316455685,
+      "lon": -101.60255088607596,
+      "capacity_mw": 222.78,
+      "turbine_count": 79,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Cranell",
+      "county": "Refugio County",
+      "lat": 28.190759800000006,
+      "lon": -97.43240279999996,
+      "capacity_mw": 220.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 92.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Griffin Trail Wind",
+      "county": "Knox County",
+      "lat": 33.61027897435897,
+      "lon": -99.57911423076922,
+      "capacity_mw": 219.96,
+      "turbine_count": 78,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2021
+    },
+    {
+      "name": "Panhandle Wind 1",
+      "county": "Carson County",
+      "lat": 35.41959008474577,
+      "lon": -101.2465838983051,
+      "capacity_mw": 218.3,
+      "turbine_count": 118,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Panther Creek III",
+      "county": "Sterling County",
+      "lat": 31.992353458646615,
+      "lon": -101.11668721804509,
+      "capacity_mw": 212.8,
+      "turbine_count": 133,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Grandview I",
+      "county": "Carson County",
+      "lat": 35.25837466101696,
+      "lon": -101.19392415254238,
+      "capacity_mw": 211.22,
+      "turbine_count": 118,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Rattlesnake",
+      "county": "Glasscock County",
+      "lat": 31.72309389830508,
+      "lon": -101.44557559322033,
+      "capacity_mw": 211.22,
+      "turbine_count": 118,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Lacy Creek Wind Project (Edmondson Ranch Wind Energy)",
+      "county": "Glasscock County",
+      "lat": 31.72393133333333,
+      "lon": -101.3145664,
+      "capacity_mw": 210.3,
+      "turbine_count": 75,
+      "avg_hub_height_m": 114.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Horse Hollow Wind Energy Center",
+      "county": "Taylor County",
+      "lat": 32.22468557142858,
+      "lon": -100.05079535714283,
+      "capacity_mw": 210.0,
+      "turbine_count": 140,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Reloj del Sol",
+      "county": "Zapata County",
+      "lat": 27.11784603174603,
+      "lon": -99.28889603174605,
+      "capacity_mw": 209.4,
+      "turbine_count": 63,
+      "avg_hub_height_m": 120.0,
+      "online_year": 2021
+    },
+    {
+      "name": "Palo Duro",
+      "county": "Ochiltree County",
+      "lat": 36.43408902439025,
+      "lon": -101.01682373983732,
+      "capacity_mw": 209.1,
+      "turbine_count": 123,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Shannon",
+      "county": "Clay County",
+      "lat": 33.507633109243706,
+      "lon": -98.37227100840333,
+      "capacity_mw": 204.09,
+      "turbine_count": 119,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Magic Valley",
+      "county": "Willacy County",
+      "lat": 26.462490535714295,
+      "lon": -97.67926919642858,
+      "capacity_mw": 203.28,
+      "turbine_count": 112,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Montgomery Ranch Wind Farm",
+      "county": "Foard County",
+      "lat": 33.84592000000001,
+      "lon": -99.66121555555559,
+      "capacity_mw": 202.5,
+      "turbine_count": 45,
+      "avg_hub_height_m": 120.0,
+      "online_year": 2024
+    },
+    {
+      "name": "Baffin",
+      "county": "Kenedy County",
+      "lat": 27.171906039603954,
+      "lon": -97.58823287128715,
+      "capacity_mw": 202.0,
+      "turbine_count": 101,
+      "avg_hub_height_m": 90.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Penescal",
+      "county": "Kenedy County",
+      "lat": 27.08194773809524,
+      "lon": -97.51854107142856,
+      "capacity_mw": 201.6,
+      "turbine_count": 84,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Penescal II",
+      "county": "Kenedy County",
+      "lat": 27.114907738095244,
+      "lon": -97.56677297619046,
+      "capacity_mw": 201.6,
+      "turbine_count": 84,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2010
+    },
+    {
+      "name": "Los Vientos II",
+      "county": "Willacy County",
+      "lat": 26.348173809523804,
+      "lon": -97.68056607142857,
+      "capacity_mw": 201.6,
+      "turbine_count": 84,
+      "avg_hub_height_m": 90.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Mesteno",
+      "county": "Starr County",
+      "lat": 26.525828749999988,
+      "lon": -98.75021696428573,
+      "capacity_mw": 201.6,
+      "turbine_count": 56,
+      "avg_hub_height_m": 112.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Blackjack Creek",
+      "county": "Bee County",
+      "lat": 28.26163357142858,
+      "lon": -97.5269738095238,
+      "capacity_mw": 201.6,
+      "turbine_count": 42,
+      "avg_hub_height_m": 108.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Stella",
+      "county": "Kenedy County",
+      "lat": 26.913590895522393,
+      "lon": -97.6249708955224,
+      "capacity_mw": 201.0,
+      "turbine_count": 67,
+      "avg_hub_height_m": 87.5,
+      "online_year": 2018
+    },
+    {
+      "name": "Diversion Wind",
+      "county": "Baylor County",
+      "lat": 33.71731525423729,
+      "lon": -99.01925728813562,
+      "capacity_mw": 200.6,
+      "turbine_count": 59,
+      "avg_hub_height_m": 98.0,
+      "online_year": 2024
+    },
+    {
+      "name": "Great Prairie Wind 2",
+      "county": "Hansford County",
+      "lat": 36.35464873239435,
+      "lon": -101.47071830985918,
+      "capacity_mw": 200.22,
+      "turbine_count": 71,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Blue Summit III",
+      "county": "Hardeman County",
+      "lat": 34.17886170731705,
+      "lon": -99.55353439024391,
+      "capacity_mw": 200.2,
+      "turbine_count": 82,
+      "avg_hub_height_m": 88.1,
+      "online_year": 2019
+    },
+    {
+      "name": "El Algodon Alto Wind Farm",
+      "county": "San Patricio County",
+      "lat": 28.000519670329677,
+      "lon": -97.7124202197802,
+      "capacity_mw": 200.2,
+      "turbine_count": 91,
+      "avg_hub_height_m": 92.4,
+      "online_year": 2022
+    },
+    {
+      "name": "Papalote Creek II",
+      "county": "San Patricio County",
+      "lat": 27.977422988505737,
+      "lon": -97.35091758620692,
+      "capacity_mw": 200.1,
+      "turbine_count": 87,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2010
+    },
+    {
+      "name": "Logan's Gap Wind",
+      "county": "Comanche County",
+      "lat": 31.817492298850564,
+      "lon": -98.69413678160917,
+      "capacity_mw": 200.1,
+      "turbine_count": 87,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Lone Star I",
+      "county": "Shackelford County",
+      "lat": 32.60956590000001,
+      "lon": -99.50207799999998,
+      "capacity_mw": 200.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 78.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Los Vientos III",
+      "county": "Starr County",
+      "lat": 26.48210430000001,
+      "lon": -98.59039980000001,
+      "capacity_mw": 200.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 95.0,
+      "online_year": 2015
+    },
+    {
+      "name": "South Plains",
+      "county": "Floyd County",
+      "lat": 34.1010634,
+      "lon": -101.34577499999997,
+      "capacity_mw": 200.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Los Vientos IV",
+      "county": "Starr County",
+      "lat": 26.569933199999994,
+      "lon": -98.68619539999996,
+      "capacity_mw": 200.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 95.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Javelina II",
+      "county": "Webb County",
+      "lat": 27.45936219999999,
+      "lon": -98.9170925,
+      "capacity_mw": 200.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 92.7,
+      "online_year": 2016
+    },
+    {
+      "name": "Hereford 1",
+      "county": "Deaf Smith County",
+      "lat": 34.76577567307693,
+      "lon": -102.26296961538463,
+      "capacity_mw": 199.9,
+      "turbine_count": 104,
+      "avg_hub_height_m": 87.2,
+      "online_year": 2014
+    },
+    {
+      "name": "Live Oak",
+      "county": "Schleicher County",
+      "lat": 31.039204736842102,
+      "lon": -100.65356934210527,
+      "capacity_mw": 199.5,
+      "turbine_count": 76,
+      "avg_hub_height_m": 85.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Mesquite Creek",
+      "county": "Dawson County",
+      "lat": 32.71735063063062,
+      "lon": -101.75183756756758,
+      "capacity_mw": 198.69,
+      "turbine_count": 111,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Bearkat I",
+      "county": "Glasscock County",
+      "lat": 31.76515263157894,
+      "lon": -101.59474754385965,
+      "capacity_mw": 196.65,
+      "turbine_count": 57,
+      "avg_hub_height_m": 87.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Spinning Spur 3",
+      "county": "Oldham County",
+      "lat": 35.30171659793815,
+      "lon": -102.71965546391755,
+      "capacity_mw": 194.0,
+      "turbine_count": 97,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Limestone Wind",
+      "county": "Navarro County",
+      "lat": 31.856353157894734,
+      "lon": -96.6554964912281,
+      "capacity_mw": 193.8,
+      "turbine_count": 57,
+      "avg_hub_height_m": 117.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Stephens Ranch 1",
+      "county": "Borden County",
+      "lat": 32.90267555555555,
+      "lon": -101.65037888888885,
+      "capacity_mw": 193.32,
+      "turbine_count": 108,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "High Lonesome",
+      "county": "Crockett County",
+      "lat": 31.04958707692308,
+      "lon": -101.92377676923078,
+      "capacity_mw": 190.0,
+      "turbine_count": 65,
+      "avg_hub_height_m": 84.4,
+      "online_year": 2019
+    },
+    {
+      "name": "Horse Creek Wind",
+      "county": "Haskell County",
+      "lat": 33.34578654320989,
+      "lon": -99.54563777777774,
+      "capacity_mw": 186.3,
+      "turbine_count": 81,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Lockett",
+      "county": "Wilbarger County",
+      "lat": 34.08009159999999,
+      "lon": -99.25085359999999,
+      "capacity_mw": 183.75,
+      "turbine_count": 75,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Maryneal",
+      "county": "Nolan County",
+      "lat": 32.20148947368421,
+      "lon": -100.46727078947367,
+      "capacity_mw": 182.4,
+      "turbine_count": 38,
+      "avg_hub_height_m": 108.0,
+      "online_year": 2021
+    },
+    {
+      "name": "Panhandle Wind 2",
+      "county": "Carson County",
+      "lat": 35.44322379746833,
+      "lon": -101.38592189873418,
+      "capacity_mw": 181.7,
+      "turbine_count": 79,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Las Lomas",
+      "county": "Zapata County",
+      "lat": 26.711031860465106,
+      "lon": -99.04341395348837,
+      "capacity_mw": 180.6,
+      "turbine_count": 43,
+      "avg_hub_height_m": 110.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Wildcat Creek (Cooke Wind Farm)",
+      "county": "Cooke County",
+      "lat": 33.56036365384615,
+      "lon": -97.34624903846155,
+      "capacity_mw": 180.08,
+      "turbine_count": 52,
+      "avg_hub_height_m": 81.9,
+      "online_year": 2021
+    },
+    {
+      "name": "Bull Creek",
+      "county": "Borden County",
+      "lat": 32.93194572222224,
+      "lon": -101.58032783333341,
+      "capacity_mw": 180.0,
+      "turbine_count": 180,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Lane City Wind",
+      "county": "Wharton County",
+      "lat": 29.179222999999997,
+      "lon": -95.99539900000002,
+      "capacity_mw": 180.0,
+      "turbine_count": 40,
+      "avg_hub_height_m": 113.0,
+      "online_year": 2025
+    },
+    {
+      "name": "Heart of Texas",
+      "county": "McCulloch County",
+      "lat": 31.240641874999998,
+      "lon": -99.4216759375,
+      "capacity_mw": 179.88,
+      "turbine_count": 64,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Papalote Creek",
+      "county": "San Patricio County",
+      "lat": 27.935135963302756,
+      "lon": -97.46265467889906,
+      "capacity_mw": 179.85,
+      "turbine_count": 109,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Flat Top",
+      "county": "Mills County",
+      "lat": 31.620120568181804,
+      "lon": -98.56604738636365,
+      "capacity_mw": 176.0,
+      "turbine_count": 88,
+      "avg_hub_height_m": 95.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Miami",
+      "county": "Roberts County",
+      "lat": 35.6591425263158,
+      "lon": -100.57977284210531,
+      "capacity_mw": 175.75,
+      "turbine_count": 95,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "La Chalupa",
+      "county": "Cameron County",
+      "lat": 26.24565763636364,
+      "lon": -97.50702854545452,
+      "capacity_mw": 173.25,
+      "turbine_count": 55,
+      "avg_hub_height_m": 87.5,
+      "online_year": 2021
+    },
+    {
+      "name": "Hubbard",
+      "county": "Limestone County",
+      "lat": 31.70965306451614,
+      "lon": -96.83882403225806,
+      "capacity_mw": 173.24,
+      "turbine_count": 62,
+      "avg_hub_height_m": 89.9,
+      "online_year": 2021
+    },
+    {
+      "name": "Pyron (Roscoe III)",
+      "county": "Scurry County",
+      "lat": 32.59946435185185,
+      "lon": -100.69358861111107,
+      "capacity_mw": 172.8,
+      "turbine_count": 108,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Horse Hollow II",
+      "county": "Nolan County",
+      "lat": 32.274891066666655,
+      "lon": -100.1886324,
+      "capacity_mw": 172.5,
+      "turbine_count": 75,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Appaloosa Run",
+      "county": "Upton County",
+      "lat": 31.16289096774194,
+      "lon": -101.83173193548389,
+      "capacity_mw": 171.85,
+      "turbine_count": 62,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2022
+    },
+    {
+      "name": "West Raymond",
+      "county": "Willacy County",
+      "lat": 26.384360632911385,
+      "lon": -97.82026746835444,
+      "capacity_mw": 171.8,
+      "turbine_count": 79,
+      "avg_hub_height_m": 92.4,
+      "online_year": 2021
+    },
+    {
+      "name": "Gulf Wind Repower",
+      "county": "Kenedy County",
+      "lat": 26.981563378378382,
+      "lon": -97.56129202702705,
+      "capacity_mw": 170.2,
+      "turbine_count": 74,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2021
+    },
+    {
+      "name": "Turkey Track",
+      "county": "Nolan County",
+      "lat": 32.206883008849566,
+      "lon": -100.24621690265487,
+      "capacity_mw": 169.5,
+      "turbine_count": 113,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Torrecillas",
+      "county": "Webb County",
+      "lat": 27.607130895522385,
+      "lon": -98.83758835820895,
+      "capacity_mw": 167.5,
+      "turbine_count": 67,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Hackberry",
+      "county": "Shackelford County",
+      "lat": 32.78149916666668,
+      "lon": -99.45857902777773,
+      "capacity_mw": 165.6,
+      "turbine_count": 72,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Cameron",
+      "county": "Cameron County",
+      "lat": 26.192769090909092,
+      "lon": -97.48520963636365,
+      "capacity_mw": 165.0,
+      "turbine_count": 55,
+      "avg_hub_height_m": 87.5,
+      "online_year": 2015
+    },
+    {
+      "name": "Stephens Ranch II",
+      "county": "Lynn County",
+      "lat": 32.993018043478266,
+      "lon": -101.66242293478258,
+      "capacity_mw": 164.68,
+      "turbine_count": 92,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Falvez Astra",
+      "county": "Randall County",
+      "lat": 34.77948897058823,
+      "lon": -102.05192250000007,
+      "capacity_mw": 163.2,
+      "turbine_count": 68,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Crawfish Wind Project (Prairie Switch)",
+      "county": "Wharton County",
+      "lat": 29.16111083333334,
+      "lon": -96.14611270833335,
+      "capacity_mw": 163.2,
+      "turbine_count": 48,
+      "avg_hub_height_m": 117.0,
+      "online_year": 2024
+    },
+    {
+      "name": "Bearkat II",
+      "county": "Glasscock County",
+      "lat": 31.75765574468085,
+      "lon": -101.67409680851067,
+      "capacity_mw": 162.15,
+      "turbine_count": 47,
+      "avg_hub_height_m": 87.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Bobcat Bluff",
+      "county": "Archer County",
+      "lat": 33.50354970000001,
+      "lon": -98.5787138,
+      "capacity_mw": 162.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Spinning Spur Wind Ranch",
+      "county": "Oldham County",
+      "lat": 35.306786428571435,
+      "lon": -102.47320414285714,
+      "capacity_mw": 161.0,
+      "turbine_count": 70,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Wildorado",
+      "county": "Oldham County",
+      "lat": 35.287909428571425,
+      "lon": -102.30774871428574,
+      "capacity_mw": 161.0,
+      "turbine_count": 70,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Spinning Spur 2",
+      "county": "Oldham County",
+      "lat": 35.30766620689655,
+      "lon": -102.59496390804598,
+      "capacity_mw": 160.95,
+      "turbine_count": 87,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Jumbo Hill",
+      "county": "Andrews County",
+      "lat": 32.394541929824555,
+      "lon": -102.9408949122807,
+      "capacity_mw": 160.74,
+      "turbine_count": 57,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Rattlesnake Wind",
+      "county": "McCulloch County",
+      "lat": 31.249655156250004,
+      "lon": -99.534431875,
+      "capacity_mw": 160.0,
+      "turbine_count": 64,
+      "avg_hub_height_m": 90.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Midway",
+      "county": "San Patricio County",
+      "lat": 27.945827608695648,
+      "lon": -97.32783391304343,
+      "capacity_mw": 159.39,
+      "turbine_count": 46,
+      "avg_hub_height_m": 84.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Fluvanna I",
+      "county": "Scurry County",
+      "lat": 32.88555621621623,
+      "lon": -101.11538932432428,
+      "capacity_mw": 155.4,
+      "turbine_count": 74,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Los Vientos I",
+      "county": "Willacy County",
+      "lat": 26.334990746268662,
+      "lon": -97.5897553731343,
+      "capacity_mw": 154.1,
+      "turbine_count": 67,
+      "avg_hub_height_m": 98.1,
+      "online_year": 2012
+    },
+    {
+      "name": "East Raymond",
+      "county": "Willacy County",
+      "lat": 26.386430714285712,
+      "lon": -97.72099714285714,
+      "capacity_mw": 153.8,
+      "turbine_count": 70,
+      "avg_hub_height_m": 92.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Castle Gap Wind",
+      "county": "Mills County",
+      "lat": 31.402025,
+      "lon": -98.3822809375,
+      "capacity_mw": 153.6,
+      "turbine_count": 32,
+      "avg_hub_height_m": 108.0,
+      "online_year": 2023
+    },
+    {
+      "name": "Century Oak Wind",
+      "county": "Callahan County",
+      "lat": 32.43042088888888,
+      "lon": -99.18243155555554,
+      "capacity_mw": 153.0,
+      "turbine_count": 45,
+      "avg_hub_height_m": 112.4,
+      "online_year": 2023
+    },
+    {
+      "name": "Roadrunner",
+      "county": "Eastland County",
+      "lat": 32.446258518518526,
+      "lon": -99.09080814814813,
+      "capacity_mw": 152.28,
+      "turbine_count": 54,
+      "avg_hub_height_m": 114.0,
+      "online_year": 2024
+    },
+    {
+      "name": "Old Settler Wind",
+      "county": "Floyd County",
+      "lat": 34.02629365079365,
+      "lon": -101.15620555555557,
+      "capacity_mw": 151.2,
+      "turbine_count": 63,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Peyton Creek",
+      "county": "Matagorda County",
+      "lat": 28.86620749999999,
+      "lon": -95.90189229166667,
+      "capacity_mw": 151.2,
+      "turbine_count": 48,
+      "avg_hub_height_m": 87.5,
+      "online_year": 2020
+    },
+    {
+      "name": "Wildcat Ranch",
+      "county": "Cochran County",
+      "lat": 33.537467462686564,
+      "lon": -102.90619731343287,
+      "capacity_mw": 150.59,
+      "turbine_count": 67,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Sherbino I",
+      "county": "Pecos County",
+      "lat": 30.817827800000003,
+      "lon": -102.3595944,
+      "capacity_mw": 150.0,
+      "turbine_count": 50,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "McAdoo",
+      "county": "Dickens County",
+      "lat": 33.7639582,
+      "lon": -100.98416800000001,
+      "capacity_mw": 150.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Green Pastures I",
+      "county": "Baylor County",
+      "lat": 33.64448080000001,
+      "lon": -99.3928622,
+      "capacity_mw": 150.0,
+      "turbine_count": 50,
+      "avg_hub_height_m": 92.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Cedro Hill",
+      "county": "Webb County",
+      "lat": 27.576278800000015,
+      "lon": -98.90881169999997,
+      "capacity_mw": 150.0,
+      "turbine_count": 100,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2010
+    },
+    {
+      "name": "Briscoe",
+      "county": "Briscoe County",
+      "lat": 34.37560888888889,
+      "lon": -101.31016679012343,
+      "capacity_mw": 149.85,
+      "turbine_count": 81,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Rocksprings",
+      "county": "Val Verde County",
+      "lat": 29.767658550724647,
+      "lon": -100.7723956521739,
+      "capacity_mw": 149.34,
+      "turbine_count": 69,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Goldthwaite",
+      "county": "Mills County",
+      "lat": 31.38867209302326,
+      "lon": -98.48703581395353,
+      "capacity_mw": 148.6,
+      "turbine_count": 86,
+      "avg_hub_height_m": 80.2,
+      "online_year": 2013
+    },
+    {
+      "name": "Cactus Flats",
+      "county": "Concho County",
+      "lat": 31.11106767441861,
+      "lon": -100.01763232558143,
+      "capacity_mw": 148.35,
+      "turbine_count": 43,
+      "avg_hub_height_m": 87.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Inadale (Roscoe IV)",
+      "county": "Nolan County",
+      "lat": 32.49901716216216,
+      "lon": -100.56694574324324,
+      "capacity_mw": 148.0,
+      "turbine_count": 148,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Lone Star II",
+      "county": "Shackelford County",
+      "lat": 32.54589191780821,
+      "lon": -99.51325054794522,
+      "capacity_mw": 146.0,
+      "turbine_count": 73,
+      "avg_hub_height_m": 78.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Canadian Breaks",
+      "county": "Oldham County",
+      "lat": 35.20649587301586,
+      "lon": -102.32123523809524,
+      "capacity_mw": 144.9,
+      "turbine_count": 63,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Palmas Altas",
+      "county": "Cameron County",
+      "lat": 26.300866739130434,
+      "lon": -97.48015130434781,
+      "capacity_mw": 144.9,
+      "turbine_count": 46,
+      "avg_hub_height_m": 87.5,
+      "online_year": 2019
+    },
+    {
+      "name": "Gopher Creek Wind Farm",
+      "county": "Borden County",
+      "lat": 32.88203583333333,
+      "lon": -101.24087180555556,
+      "capacity_mw": 144.0,
+      "turbine_count": 72,
+      "avg_hub_height_m": 94.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Sweetwater Phase III",
+      "county": "Nolan County",
+      "lat": 32.306847111111125,
+      "lon": -100.43685588888889,
+      "capacity_mw": 144.0,
+      "turbine_count": 90,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2005
+    },
+    {
+      "name": "Green Pastures II",
+      "county": "Knox County",
+      "lat": 33.653960851063836,
+      "lon": -99.52140531914891,
+      "capacity_mw": 141.0,
+      "turbine_count": 47,
+      "avg_hub_height_m": 92.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Wake",
+      "county": "Floyd County",
+      "lat": 33.868755853658534,
+      "lon": -101.10204073170735,
+      "capacity_mw": 140.63,
+      "turbine_count": 82,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Pioneer Hutt Wind",
+      "county": "Midland County",
+      "lat": 31.774152745098032,
+      "lon": -101.9065690196079,
+      "capacity_mw": 140.18,
+      "turbine_count": 51,
+      "avg_hub_height_m": 110.7,
+      "online_year": 2024
+    },
+    {
+      "name": "Blue Summit",
+      "county": "Wilbarger County",
+      "lat": 34.30483647058824,
+      "lon": -99.37687141176472,
+      "capacity_mw": 139.74,
+      "turbine_count": 85,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Notrees",
+      "county": "Winkler County",
+      "lat": 32.00021551724139,
+      "lon": -102.83276528735632,
+      "capacity_mw": 139.11,
+      "turbine_count": 87,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Western Trail",
+      "county": "Baylor County",
+      "lat": 33.81904795918366,
+      "lon": -99.06610959183672,
+      "capacity_mw": 138.18,
+      "turbine_count": 49,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2021
+    },
+    {
+      "name": "Sweetwater IVa",
+      "county": "Nolan County",
+      "lat": 32.29843044444445,
+      "lon": -100.50309807407412,
+      "capacity_mw": 135.0,
+      "turbine_count": 135,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Torrecillas",
+      "county": "Duval County",
+      "lat": 27.62047358490566,
+      "lon": -98.75976415094338,
+      "capacity_mw": 132.5,
+      "turbine_count": 53,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Trinity Hills",
+      "county": "Archer County",
+      "lat": 33.422819166666656,
+      "lon": -98.69461250000002,
+      "capacity_mw": 132.0,
+      "turbine_count": 60,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Camp Springs",
+      "county": "Scurry County",
+      "lat": 32.76485505747126,
+      "lon": -100.80783344827587,
+      "capacity_mw": 130.5,
+      "turbine_count": 87,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Amadeus",
+      "county": "Kent County",
+      "lat": 33.03003347826087,
+      "lon": -100.5441791304348,
+      "capacity_mw": 129.72,
+      "turbine_count": 46,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Hubbard",
+      "county": "Hill County",
+      "lat": 31.788913478260866,
+      "lon": -96.87133630434782,
+      "capacity_mw": 128.12,
+      "turbine_count": 46,
+      "avg_hub_height_m": 89.9,
+      "online_year": 2021
+    },
+    {
+      "name": "Horse Hollow II",
+      "county": "Taylor County",
+      "lat": 32.20733490909092,
+      "lon": -100.00118981818183,
+      "capacity_mw": 126.5,
+      "turbine_count": 55,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Salt Fork",
+      "county": "Donley County",
+      "lat": 35.163849047619046,
+      "lon": -100.93035539682539,
+      "capacity_mw": 126.0,
+      "turbine_count": 63,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Tyler Bluff",
+      "county": "Cooke County",
+      "lat": 33.69925057692308,
+      "lon": -97.37071961538462,
+      "capacity_mw": 125.58,
+      "turbine_count": 52,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Trent Mesa",
+      "county": "Nolan County",
+      "lat": 32.435552650602425,
+      "lon": -100.23045409638556,
+      "capacity_mw": 124.5,
+      "turbine_count": 83,
+      "avg_hub_height_m": 65.0,
+      "online_year": 2001
+    },
+    {
+      "name": "Forest Creek Wind Project",
+      "county": "Sterling County",
+      "lat": 32.039048888888885,
+      "lon": -101.21308129629631,
+      "capacity_mw": 124.2,
+      "turbine_count": 54,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2006
+    },
+    {
+      "name": "Senate",
+      "county": "Jack County",
+      "lat": 33.1947956451613,
+      "lon": -98.34701919354839,
+      "capacity_mw": 124.0,
+      "turbine_count": 62,
+      "avg_hub_height_m": 100.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Elbow Creek Wind Farm",
+      "county": "Howard County",
+      "lat": 32.170206792452824,
+      "lon": -101.41412962264152,
+      "capacity_mw": 121.9,
+      "turbine_count": 53,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Blue Cloud I",
+      "county": "Bailey County",
+      "lat": 34.057228285714295,
+      "lon": -102.6588102857143,
+      "capacity_mw": 120.75,
+      "turbine_count": 35,
+      "avg_hub_height_m": 87.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Sherbino II",
+      "county": "Pecos County",
+      "lat": 30.771808,
+      "lon": -102.5076286666667,
+      "capacity_mw": 120.5,
+      "turbine_count": 60,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2011
+    },
+    {
+      "name": "Barton Chapel",
+      "county": "Jack County",
+      "lat": 33.07254166666666,
+      "lon": -98.3298971666667,
+      "capacity_mw": 120.0,
+      "turbine_count": 60,
+      "avg_hub_height_m": 78.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Camp Springs II",
+      "county": "Scurry County",
+      "lat": 32.73002125000001,
+      "lon": -100.81512637499998,
+      "capacity_mw": 120.0,
+      "turbine_count": 80,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Stanton Energy Center",
+      "county": "Martin County",
+      "lat": 32.21026650000001,
+      "lon": -101.81462937500004,
+      "capacity_mw": 120.0,
+      "turbine_count": 80,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Wolf Ridge",
+      "county": "Cooke County",
+      "lat": 33.73177973333334,
+      "lon": -97.4064384,
+      "capacity_mw": 120.0,
+      "turbine_count": 75,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Grandview II (Colbeck's Corner)",
+      "county": "Carson County",
+      "lat": 35.33232238805971,
+      "lon": -101.13162388059706,
+      "capacity_mw": 119.93,
+      "turbine_count": 67,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Gunsight",
+      "county": "Howard County",
+      "lat": 32.486372985074624,
+      "lon": -101.44834074626866,
+      "capacity_mw": 119.93,
+      "turbine_count": 67,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Panther Creek II",
+      "county": "Glasscock County",
+      "lat": 31.93793375,
+      "lon": -101.30405694444444,
+      "capacity_mw": 116.64,
+      "turbine_count": 72,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Wake",
+      "county": "Crosby County",
+      "lat": 33.80322500000001,
+      "lon": -101.10839911764702,
+      "capacity_mw": 116.62,
+      "turbine_count": 68,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Longhorn",
+      "county": "Floyd County",
+      "lat": 34.293531379310345,
+      "lon": -101.23512431034482,
+      "capacity_mw": 116.0,
+      "turbine_count": 58,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Sage Draw",
+      "county": "Garza County",
+      "lat": 33.30697756097562,
+      "lon": -101.5230126829268,
+      "capacity_mw": 115.62,
+      "turbine_count": 41,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Desert Sky",
+      "county": "Pecos County",
+      "lat": 30.92949763157894,
+      "lon": -102.12738144736839,
+      "capacity_mw": 115.4,
+      "turbine_count": 76,
+      "avg_hub_height_m": 65.8,
+      "online_year": 2001
+    },
+    {
+      "name": "Panther Creek I",
+      "county": "Glasscock County",
+      "lat": 31.99819732394365,
+      "lon": -101.41154507042249,
+      "capacity_mw": 115.02,
+      "turbine_count": 71,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Noble Great Plains",
+      "county": "Hansford County",
+      "lat": 36.47458223684213,
+      "lon": -101.36424802631579,
+      "capacity_mw": 114.0,
+      "turbine_count": 76,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Callahan Divide",
+      "county": "Taylor County",
+      "lat": 32.32081368421052,
+      "lon": -100.00517210526313,
+      "capacity_mw": 114.0,
+      "turbine_count": 76,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Miami",
+      "county": "Hemphill County",
+      "lat": 35.64536377049181,
+      "lon": -100.47468459016393,
+      "capacity_mw": 112.85,
+      "turbine_count": 61,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Keechi",
+      "county": "Jack County",
+      "lat": 33.148510727272736,
+      "lon": -98.16408709090912,
+      "capacity_mw": 110.0,
+      "turbine_count": 55,
+      "avg_hub_height_m": 95.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Los Vientos V",
+      "county": "Starr County",
+      "lat": 26.398804000000002,
+      "lon": -98.57241381818181,
+      "capacity_mw": 110.0,
+      "turbine_count": 55,
+      "avg_hub_height_m": 95.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Sweetwater IVb",
+      "county": "Nolan County",
+      "lat": 32.26236847826087,
+      "lon": -100.49555652173913,
+      "capacity_mw": 105.8,
+      "turbine_count": 46,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Gulf Wind",
+      "county": "Kenedy County",
+      "lat": 26.956415681818182,
+      "lon": -97.5942740909091,
+      "capacity_mw": 105.6,
+      "turbine_count": 44,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Roscoe",
+      "county": "Mitchell County",
+      "lat": 32.489967019230754,
+      "lon": -100.69743865384619,
+      "capacity_mw": 104.0,
+      "turbine_count": 104,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Hidalgo",
+      "county": "Hidalgo County",
+      "lat": 26.500150961538466,
+      "lon": -98.4345821153846,
+      "capacity_mw": 104.0,
+      "turbine_count": 52,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Buffalo Gap 3",
+      "county": "Nolan County",
+      "lat": 32.29889155555555,
+      "lon": -100.18033444444443,
+      "capacity_mw": 103.5,
+      "turbine_count": 45,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Loraine",
+      "county": "Mitchell County",
+      "lat": 32.4627005882353,
+      "lon": -100.73843279411766,
+      "capacity_mw": 102.0,
+      "turbine_count": 68,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2010
+    },
+    {
+      "name": "Roscoe",
+      "county": "Nolan County",
+      "lat": 32.45319732673268,
+      "lon": -100.62191594059401,
+      "capacity_mw": 101.0,
+      "turbine_count": 101,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Roadrunner",
+      "county": "Callahan County",
+      "lat": 32.47189222222222,
+      "lon": -99.1448441666667,
+      "capacity_mw": 100.92,
+      "turbine_count": 36,
+      "avg_hub_height_m": 112.7,
+      "online_year": 2024
+    },
+    {
+      "name": "Buckthorn",
+      "county": "Erath County",
+      "lat": 32.36647655172413,
+      "lon": -98.39685448275864,
+      "capacity_mw": 100.05,
+      "turbine_count": 29,
+      "avg_hub_height_m": 87.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Hidalgo II",
+      "county": "Hidalgo County",
+      "lat": 26.4985852,
+      "lon": -98.36742259999995,
+      "capacity_mw": 100.0,
+      "turbine_count": 50,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Anacacho",
+      "county": "Kinney County",
+      "lat": 29.190199818181817,
+      "lon": -100.1920981818182,
+      "capacity_mw": 99.0,
+      "turbine_count": 55,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Sweetwater Phase II",
+      "county": "Nolan County",
+      "lat": 32.333504918032794,
+      "lon": -100.37348295081965,
+      "capacity_mw": 98.82,
+      "turbine_count": 61,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Limestone Wind",
+      "county": "Limestone County",
+      "lat": 31.763697586206895,
+      "lon": -96.70016379310346,
+      "capacity_mw": 98.6,
+      "turbine_count": 29,
+      "avg_hub_height_m": 117.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Brazos Wind Repower",
+      "county": "Scurry County",
+      "lat": 32.94105149999999,
+      "lon": -101.12848949999997,
+      "capacity_mw": 96.0,
+      "turbine_count": 20,
+      "avg_hub_height_m": 108.0,
+      "online_year": 2003
+    },
+    {
+      "name": "King Creek 1",
+      "county": "Haskell County",
+      "lat": 33.256348947368416,
+      "lon": -99.49299736842106,
+      "capacity_mw": 95.0,
+      "turbine_count": 19,
+      "avg_hub_height_m": 102.5,
+      "online_year": 2022
+    },
+    {
+      "name": "San Roman",
+      "county": "Cameron County",
+      "lat": 26.1112470967742,
+      "lon": -97.36886258064514,
+      "capacity_mw": 93.0,
+      "turbine_count": 31,
+      "avg_hub_height_m": 87.5,
+      "online_year": 2016
+    },
+    {
+      "name": "Pyron (Roscoe III)",
+      "county": "Fisher County",
+      "lat": 32.57655241379312,
+      "lon": -100.63786999999998,
+      "capacity_mw": 92.8,
+      "turbine_count": 58,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Champion",
+      "county": "Nolan County",
+      "lat": 32.392048,
+      "lon": -100.60965949999999,
+      "capacity_mw": 92.0,
+      "turbine_count": 40,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "White Tail",
+      "county": "Webb County",
+      "lat": 27.49051192982456,
+      "lon": -98.98592315789477,
+      "capacity_mw": 91.2,
+      "turbine_count": 57,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Langford",
+      "county": "Tom Green County",
+      "lat": 31.138224107142857,
+      "lon": -100.63106607142858,
+      "capacity_mw": 89.6,
+      "turbine_count": 56,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Lacy Creek Wind Project (Edmondson Ranch Wind Energy)",
+      "county": "Sterling County",
+      "lat": 31.733040000000006,
+      "lon": -101.23949656250002,
+      "capacity_mw": 88.44,
+      "turbine_count": 32,
+      "avg_hub_height_m": 114.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Brazos Wind Repower",
+      "county": "Borden County",
+      "lat": 32.94013611111111,
+      "lon": -101.27061333333333,
+      "capacity_mw": 86.4,
+      "turbine_count": 18,
+      "avg_hub_height_m": 108.0,
+      "online_year": 2003
+    },
+    {
+      "name": "Majestic",
+      "county": "Carson County",
+      "lat": 35.4033254716981,
+      "lon": -101.52562490566035,
+      "capacity_mw": 84.8,
+      "turbine_count": 53,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Longhorn",
+      "county": "Briscoe County",
+      "lat": 34.33081833333332,
+      "lon": -101.25290857142856,
+      "capacity_mw": 84.0,
+      "turbine_count": 42,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Broadview Energy JN LLC",
+      "county": "Deaf Smith County",
+      "lat": 34.79491361111112,
+      "lon": -102.97718305555556,
+      "capacity_mw": 82.8,
+      "turbine_count": 36,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Indian Mesa",
+      "county": "Pecos County",
+      "lat": 30.9426408,
+      "lon": -102.19556648,
+      "capacity_mw": 82.5,
+      "turbine_count": 125,
+      "avg_hub_height_m": 50.0,
+      "online_year": 2001
+    },
+    {
+      "name": "Route 66",
+      "county": "Carson County",
+      "lat": 35.207719999999995,
+      "lon": -101.47898634146338,
+      "capacity_mw": 82.0,
+      "turbine_count": 41,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Woodward Mountain I",
+      "county": "Pecos County",
+      "lat": 30.926357967479667,
+      "lon": -102.46688406504067,
+      "capacity_mw": 81.18,
+      "turbine_count": 123,
+      "avg_hub_height_m": 50.0,
+      "online_year": 2001
+    },
+    {
+      "name": "Buffalo Gap Wind Farm",
+      "county": "Taylor County",
+      "lat": 32.306973333333325,
+      "lon": -100.10866311111111,
+      "capacity_mw": 81.0,
+      "turbine_count": 45,
+      "avg_hub_height_m": 78.0,
+      "online_year": 2005
+    },
+    {
+      "name": "Grandview II (Colbeck's Corner)",
+      "county": "Gray County",
+      "lat": 35.32731733333333,
+      "lon": -101.05477911111112,
+      "capacity_mw": 80.55,
+      "turbine_count": 45,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Sweetwater V",
+      "county": "Nolan County",
+      "lat": 32.23108114285715,
+      "lon": -100.48027114285718,
+      "capacity_mw": 80.5,
+      "turbine_count": 35,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Lorenzo Winds",
+      "county": "Crosby County",
+      "lat": 33.74488527777778,
+      "lon": -101.47817972222222,
+      "capacity_mw": 80.46,
+      "turbine_count": 36,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2018
+    },
+    {
+      "name": "JD Wind 4",
+      "county": "Hansford County",
+      "lat": 36.39249552631579,
+      "lon": -101.37542710526316,
+      "capacity_mw": 79.8,
+      "turbine_count": 38,
+      "avg_hub_height_m": 79.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Majestic II",
+      "county": "Carson County",
+      "lat": 35.38981627450981,
+      "lon": -101.5877688235294,
+      "capacity_mw": 79.6,
+      "turbine_count": 51,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Llano Estacado Wind Ranch at White Deer",
+      "county": "Carson County",
+      "lat": 35.46683594936709,
+      "lon": -101.23000291139245,
+      "capacity_mw": 79.0,
+      "turbine_count": 79,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2001
+    },
+    {
+      "name": "Woodward Mountain II",
+      "county": "Pecos County",
+      "lat": 30.961660608695652,
+      "lon": -102.4041616521739,
+      "capacity_mw": 75.9,
+      "turbine_count": 115,
+      "avg_hub_height_m": 50.5,
+      "online_year": 2001
+    },
+    {
+      "name": "Inertia Wind Project",
+      "county": "Throckmorton County",
+      "lat": 33.15494296296296,
+      "lon": -99.44718888888889,
+      "capacity_mw": 75.54,
+      "turbine_count": 27,
+      "avg_hub_height_m": 112.1,
+      "online_year": 2023
+    },
+    {
+      "name": "Amadeus",
+      "county": "Fisher County",
+      "lat": 32.89840823529412,
+      "lon": -100.57863058823531,
+      "capacity_mw": 75.28,
+      "turbine_count": 34,
+      "avg_hub_height_m": 83.7,
+      "online_year": 2020
+    },
+    {
+      "name": "Sendero",
+      "county": "Jim Hogg County",
+      "lat": 27.18411371428571,
+      "lon": -98.91187285714285,
+      "capacity_mw": 70.0,
+      "turbine_count": 35,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Goat Phase II",
+      "county": "Coke County",
+      "lat": 31.961583793103454,
+      "lon": -100.77586448275862,
+      "capacity_mw": 69.6,
+      "turbine_count": 29,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Karankawa",
+      "county": "Bee County",
+      "lat": 28.177415862068973,
+      "lon": -97.74064689655172,
+      "capacity_mw": 69.32,
+      "turbine_count": 29,
+      "avg_hub_height_m": 89.6,
+      "online_year": 2019
+    },
+    {
+      "name": "Route 66",
+      "county": "Armstrong County",
+      "lat": 35.1615594117647,
+      "lon": -101.4376811764706,
+      "capacity_mw": 68.0,
+      "turbine_count": 34,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Buffalo Gap 3",
+      "county": "Taylor County",
+      "lat": 32.29142827586206,
+      "lon": -100.12526241379311,
+      "capacity_mw": 66.7,
+      "turbine_count": 29,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Golden Spread Panhandle Wind Ranch",
+      "county": "Oldham County",
+      "lat": 35.23247448275862,
+      "lon": -102.20976413793105,
+      "capacity_mw": 66.7,
+      "turbine_count": 29,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2011
+    },
+    {
+      "name": "Trinity Hills",
+      "county": "Young County",
+      "lat": 33.36932133333334,
+      "lon": -98.65084199999997,
+      "capacity_mw": 66.0,
+      "turbine_count": 30,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Windthorst-2",
+      "county": "Archer County",
+      "lat": 33.501071071428576,
+      "lon": -98.50037714285713,
+      "capacity_mw": 64.4,
+      "turbine_count": 28,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Snyder",
+      "county": "Scurry County",
+      "lat": 32.738258571428574,
+      "lon": -100.73650619047619,
+      "capacity_mw": 63.0,
+      "turbine_count": 21,
+      "avg_hub_height_m": 105.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Goat Phase I",
+      "county": "Coke County",
+      "lat": 31.948283492063474,
+      "lon": -100.80694936507935,
+      "capacity_mw": 63.0,
+      "turbine_count": 63,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Cirrus 1",
+      "county": "Lynn County",
+      "lat": 33.027281176470595,
+      "lon": -101.6967905882353,
+      "capacity_mw": 61.2,
+      "turbine_count": 17,
+      "avg_hub_height_m": 82.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Whirlwind Energy Center",
+      "county": "Floyd County",
+      "lat": 34.11667923076922,
+      "lon": -101.09630961538461,
+      "capacity_mw": 59.8,
+      "turbine_count": 26,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2007
+    },
+    {
+      "name": "South Trent Mesa",
+      "county": "Nolan County",
+      "lat": 32.41741359999999,
+      "lon": -100.22364759999999,
+      "capacity_mw": 57.5,
+      "turbine_count": 25,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Sand Bluff",
+      "county": "Glasscock County",
+      "lat": 31.995225714285716,
+      "lon": -101.34094714285713,
+      "capacity_mw": 56.0,
+      "turbine_count": 28,
+      "avg_hub_height_m": 78.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Ocotillo",
+      "county": "Howard County",
+      "lat": 32.14352,
+      "lon": -101.39825153846155,
+      "capacity_mw": 54.6,
+      "turbine_count": 26,
+      "avg_hub_height_m": 79.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Lone Star II",
+      "county": "Callahan County",
+      "lat": 32.49589555555556,
+      "lon": -99.50464370370368,
+      "capacity_mw": 54.0,
+      "turbine_count": 27,
+      "avg_hub_height_m": 78.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Blue Summit II",
+      "county": "Hardeman County",
+      "lat": 34.21631476190477,
+      "lon": -99.49119380952382,
+      "capacity_mw": 52.5,
+      "turbine_count": 21,
+      "avg_hub_height_m": 90.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Cotton Plains Wind",
+      "county": "Floyd County",
+      "lat": 33.990232380952385,
+      "lon": -101.23732142857142,
+      "capacity_mw": 50.4,
+      "turbine_count": 21,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Hidalgo II",
+      "county": "Starr County",
+      "lat": 26.537022142857143,
+      "lon": -98.487765,
+      "capacity_mw": 50.4,
+      "turbine_count": 14,
+      "avg_hub_height_m": 112.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Capricorn Ridge",
+      "county": "Coke County",
+      "lat": 31.89027393939394,
+      "lon": -100.80225848484844,
+      "capacity_mw": 49.5,
+      "turbine_count": 33,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Canadian Breaks",
+      "county": "Deaf Smith County",
+      "lat": 35.17784,
+      "lon": -102.29613,
+      "capacity_mw": 48.3,
+      "turbine_count": 21,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Loraine II",
+      "county": "Mitchell County",
+      "lat": 32.425555625,
+      "lon": -100.67606968750003,
+      "capacity_mw": 48.0,
+      "turbine_count": 32,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2011
+    },
+    {
+      "name": "Salt Fork",
+      "county": "Gray County",
+      "lat": 35.19398208333333,
+      "lon": -100.94372958333334,
+      "capacity_mw": 48.0,
+      "turbine_count": 24,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "Blue Summit II",
+      "county": "Wilbarger County",
+      "lat": 34.24858749999999,
+      "lon": -99.453428,
+      "capacity_mw": 46.86,
+      "turbine_count": 20,
+      "avg_hub_height_m": 88.0,
+      "online_year": 2018
+    },
+    {
+      "name": "East Raymond",
+      "county": "Cameron County",
+      "lat": 26.306121428571434,
+      "lon": -97.77720952380953,
+      "capacity_mw": 46.2,
+      "turbine_count": 21,
+      "avg_hub_height_m": 92.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Los Vientos I",
+      "county": "Cameron County",
+      "lat": 26.298305000000006,
+      "lon": -97.57850249999998,
+      "capacity_mw": 46.0,
+      "turbine_count": 20,
+      "avg_hub_height_m": 98.1,
+      "online_year": 2012
+    },
+    {
+      "name": "Hidalgo",
+      "county": "Starr County",
+      "lat": 26.504967391304348,
+      "lon": -98.47779652173912,
+      "capacity_mw": 46.0,
+      "turbine_count": 23,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "West Raymond",
+      "county": "Cameron County",
+      "lat": 26.320468571428563,
+      "lon": -97.82767333333331,
+      "capacity_mw": 45.2,
+      "turbine_count": 21,
+      "avg_hub_height_m": 92.7,
+      "online_year": 2021
+    },
+    {
+      "name": "Amadeus",
+      "county": "Stonewall County",
+      "lat": 33.03162875,
+      "lon": -100.506431875,
+      "capacity_mw": 45.12,
+      "turbine_count": 16,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Red Canyon Wind Energy",
+      "county": "Borden County",
+      "lat": 32.947249000000006,
+      "lon": -101.21252033333333,
+      "capacity_mw": 45.0,
+      "turbine_count": 30,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Langford",
+      "county": "Irion County",
+      "lat": 31.121318571428567,
+      "lon": -100.71262999999999,
+      "capacity_mw": 44.8,
+      "turbine_count": 28,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Inadale (Roscoe IV)",
+      "county": "Fisher County",
+      "lat": 32.53410704545454,
+      "lon": -100.61876704545452,
+      "capacity_mw": 44.0,
+      "turbine_count": 44,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2009
+    },
+    {
+      "name": "South Trent Mesa",
+      "county": "Taylor County",
+      "lat": 32.41347736842105,
+      "lon": -100.12715473684212,
+      "capacity_mw": 43.7,
+      "turbine_count": 19,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Horse Creek Wind",
+      "county": "Knox County",
+      "lat": 33.41061894736843,
+      "lon": -99.52364473684212,
+      "capacity_mw": 43.7,
+      "turbine_count": 19,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2016
+    },
+    {
+      "name": "High Lonesome Expansion",
+      "county": "Upton County",
+      "lat": 31.13813947368421,
+      "lon": -101.9235547368421,
+      "capacity_mw": 43.7,
+      "turbine_count": 19,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Castle Gap Wind",
+      "county": "Lampasas County",
+      "lat": 31.36780333333333,
+      "lon": -98.32309888888888,
+      "capacity_mw": 43.2,
+      "turbine_count": 9,
+      "avg_hub_height_m": 108.0,
+      "online_year": 2023
+    },
+    {
+      "name": "Prairie Hill",
+      "county": "McLennan County",
+      "lat": 31.562977142857143,
+      "lon": -96.85427642857142,
+      "capacity_mw": 42.0,
+      "turbine_count": 14,
+      "avg_hub_height_m": 82.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Palo Duro",
+      "county": "Hansford County",
+      "lat": 36.358849166666666,
+      "lon": -101.09927625,
+      "capacity_mw": 40.8,
+      "turbine_count": 24,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Sunray II",
+      "county": "Moore County",
+      "lat": 35.94636333333334,
+      "lon": -101.90480111111111,
+      "capacity_mw": 40.5,
+      "turbine_count": 27,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Red Canyon Wind Energy",
+      "county": "Garza County",
+      "lat": 32.973652692307695,
+      "lon": -101.2364876923077,
+      "capacity_mw": 39.0,
+      "turbine_count": 26,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2006
+    },
+    {
+      "name": "Panther Creek I",
+      "county": "Howard County",
+      "lat": 32.11979375,
+      "lon": -101.45617375000002,
+      "capacity_mw": 38.88,
+      "turbine_count": 24,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Blackjack Creek",
+      "county": "Refugio County",
+      "lat": 28.24865875,
+      "lon": -97.47039375,
+      "capacity_mw": 38.4,
+      "turbine_count": 8,
+      "avg_hub_height_m": 108.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Santa Rita",
+      "county": "Irion County",
+      "lat": 31.198430000000005,
+      "lon": -101.23748733333333,
+      "capacity_mw": 37.5,
+      "turbine_count": 15,
+      "avg_hub_height_m": 90.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Sweetwater",
+      "county": "Nolan County",
+      "lat": 32.3613912,
+      "lon": -100.33713760000002,
+      "capacity_mw": 37.5,
+      "turbine_count": 25,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Sand Bluff",
+      "county": "Sterling County",
+      "lat": 31.9476405882353,
+      "lon": -101.24452647058824,
+      "capacity_mw": 34.0,
+      "turbine_count": 17,
+      "avg_hub_height_m": 78.0,
+      "online_year": 2007
+    },
+    {
+      "name": "Silver Star I",
+      "county": "Eastland County",
+      "lat": 32.33704375000001,
+      "lon": -98.48894125,
+      "capacity_mw": 32.0,
+      "turbine_count": 16,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Seymour Hills",
+      "county": "Baylor County",
+      "lat": 33.57815333333333,
+      "lon": -99.193405,
+      "capacity_mw": 30.24,
+      "turbine_count": 12,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Big Spring I",
+      "county": "Howard County",
+      "lat": 32.190986279069755,
+      "lon": -101.40219697674421,
+      "capacity_mw": 29.37,
+      "turbine_count": 43,
+      "avg_hub_height_m": 65.3,
+      "online_year": 1999
+    },
+    {
+      "name": "Blue Cloud I",
+      "county": "Lamb County",
+      "lat": 34.04203875,
+      "lon": -102.59190624999998,
+      "capacity_mw": 27.6,
+      "turbine_count": 8,
+      "avg_hub_height_m": 87.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Desert Sky Repower",
+      "county": "Pecos County",
+      "lat": 30.915974666666667,
+      "lon": -102.07790133333334,
+      "capacity_mw": 27.3,
+      "turbine_count": 15,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2001
+    },
+    {
+      "name": "Senate",
+      "county": "Young County",
+      "lat": 33.21390076923077,
+      "lon": -98.44288230769232,
+      "capacity_mw": 26.0,
+      "turbine_count": 13,
+      "avg_hub_height_m": 100.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Langford",
+      "county": "Schleicher County",
+      "lat": 31.080003749999996,
+      "lon": -100.69162874999998,
+      "capacity_mw": 25.6,
+      "turbine_count": 16,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Trent Mesa Repower",
+      "county": "Nolan County",
+      "lat": 32.428713333333334,
+      "lon": -100.16450666666667,
+      "capacity_mw": 25.5,
+      "turbine_count": 15,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2001
+    },
+    {
+      "name": "Mozart",
+      "county": "Kent County",
+      "lat": 32.995248000000004,
+      "lon": -100.53462900000002,
+      "capacity_mw": 25.0,
+      "turbine_count": 10,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Flat Top",
+      "county": "Comanche County",
+      "lat": 31.718861666666665,
+      "lon": -98.60244416666666,
+      "capacity_mw": 24.0,
+      "turbine_count": 12,
+      "avg_hub_height_m": 95.0,
+      "online_year": 2018
+    },
+    {
+      "name": "Buffalo Gap Wind Farm",
+      "county": "Nolan County",
+      "lat": 32.30978384615385,
+      "lon": -100.15660384615384,
+      "capacity_mw": 23.4,
+      "turbine_count": 13,
+      "avg_hub_height_m": 78.0,
+      "online_year": 2005
+    },
+    {
+      "name": "Lane City Wind",
+      "county": "Matagorda County",
+      "lat": 29.114402000000002,
+      "lon": -96.016034,
+      "capacity_mw": 22.5,
+      "turbine_count": 5,
+      "avg_hub_height_m": 113.0,
+      "online_year": 2025
+    },
+    {
+      "name": "Las Lomas",
+      "county": "Starr County",
+      "lat": 26.705066,
+      "lon": -98.979862,
+      "capacity_mw": 21.0,
+      "turbine_count": 5,
+      "avg_hub_height_m": 110.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Frisco",
+      "county": "Hansford County",
+      "lat": 36.498492,
+      "lon": -101.60474,
+      "capacity_mw": 20.0,
+      "turbine_count": 10,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Pleasant Hill",
+      "county": "Crosby County",
+      "lat": 33.74534727272727,
+      "lon": -101.45476363636364,
+      "capacity_mw": 19.8,
+      "turbine_count": 11,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "West Raymond",
+      "county": "Hidalgo County",
+      "lat": 26.39001777777778,
+      "lon": -97.87118222222223,
+      "capacity_mw": 19.6,
+      "turbine_count": 9,
+      "avg_hub_height_m": 92.3,
+      "online_year": 2021
+    },
+    {
+      "name": "Stephens Ranch 1",
+      "county": "Lynn County",
+      "lat": 32.963961999999995,
+      "lon": -101.688411,
+      "capacity_mw": 17.9,
+      "turbine_count": 10,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Goat Phase I",
+      "county": "Sterling County",
+      "lat": 31.938208823529408,
+      "lon": -100.82695,
+      "capacity_mw": 17.0,
+      "turbine_count": 17,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Great Prairie Wind 3",
+      "county": "Sherman County",
+      "lat": 36.430875,
+      "lon": -101.636325,
+      "capacity_mw": 16.92,
+      "turbine_count": 6,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Silver Star I",
+      "county": "Erath County",
+      "lat": 32.32736,
+      "lon": -98.4429325,
+      "capacity_mw": 16.0,
+      "turbine_count": 8,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Gopher Creek Wind Farm",
+      "county": "Scurry County",
+      "lat": 32.84599,
+      "lon": -101.15918857142857,
+      "capacity_mw": 14.0,
+      "turbine_count": 7,
+      "avg_hub_height_m": 94.0,
+      "online_year": 2019
+    },
+    {
+      "name": "Notrees",
+      "county": "Ector County",
+      "lat": 31.934021111111107,
+      "lon": -102.78752333333334,
+      "capacity_mw": 13.5,
+      "turbine_count": 9,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Mesquite Creek",
+      "county": "Borden County",
+      "lat": 32.69372857142857,
+      "lon": -101.68423714285713,
+      "capacity_mw": 12.53,
+      "turbine_count": 7,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Pantex Renewable Energy Project",
+      "county": "Carson County",
+      "lat": 35.32269,
+      "lon": -101.53241,
+      "capacity_mw": 11.5,
+      "turbine_count": 5,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2014
+    },
+    {
+      "name": "Golden Spread Panhandle Wind Ranch",
+      "county": "Potter County",
+      "lat": 35.240492,
+      "lon": -102.16129,
+      "capacity_mw": 11.5,
+      "turbine_count": 5,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2011
+    },
+    {
+      "name": "Great Prairie Wind 2",
+      "county": "Sherman County",
+      "lat": 36.383272500000004,
+      "lon": -101.63118750000001,
+      "capacity_mw": 11.28,
+      "turbine_count": 4,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2022
+    },
+    {
+      "name": "JD Wind Phase V",
+      "county": "Sherman County",
+      "lat": 36.4455,
+      "lon": -101.8686025,
+      "capacity_mw": 10.0,
+      "turbine_count": 8,
+      "avg_hub_height_m": 73.0,
+      "online_year": 2006
+    },
+    {
+      "name": "JD Wind VI",
+      "county": "Sherman County",
+      "lat": 36.46699499999999,
+      "lon": -101.81405249999999,
+      "capacity_mw": 10.0,
+      "turbine_count": 8,
+      "avg_hub_height_m": 72.0,
+      "online_year": 2007
+    },
+    {
+      "name": "PYCO Soaring Wind Farm",
+      "county": "Lubbock County",
+      "lat": 33.552081,
+      "lon": -101.79551000000001,
+      "capacity_mw": 10.0,
+      "turbine_count": 10,
+      "avg_hub_height_m": 70.0,
+      "online_year": 2008
+    },
+    {
+      "name": "JD Wind 7",
+      "county": "Moore County",
+      "lat": 35.998524999999994,
+      "lon": -101.8573525,
+      "capacity_mw": 10.0,
+      "turbine_count": 8,
+      "avg_hub_height_m": 74.5,
+      "online_year": 2009
+    },
+    {
+      "name": "JD Wind 11",
+      "county": "Moore County",
+      "lat": 35.8148825,
+      "lon": -101.98184,
+      "capacity_mw": 10.0,
+      "turbine_count": 8,
+      "avg_hub_height_m": 74.5,
+      "online_year": 2009
+    },
+    {
+      "name": "JD Wind 8",
+      "county": "Moore County",
+      "lat": 36.02640375,
+      "lon": -101.890815,
+      "capacity_mw": 10.0,
+      "turbine_count": 8,
+      "avg_hub_height_m": 74.5,
+      "online_year": 2009
+    },
+    {
+      "name": "JD Wind 10",
+      "county": "Moore County",
+      "lat": 35.9614,
+      "lon": -101.8022525,
+      "capacity_mw": 10.0,
+      "turbine_count": 8,
+      "avg_hub_height_m": 72.0,
+      "online_year": 2008
+    },
+    {
+      "name": "DeWind Little Pringle #2",
+      "county": "Hutchinson County",
+      "lat": 35.946796000000006,
+      "lon": -101.53833,
+      "capacity_mw": 10.0,
+      "turbine_count": 5,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2010
+    },
+    {
+      "name": "DeWind Little Pringle #1",
+      "county": "Hutchinson County",
+      "lat": 35.918572,
+      "lon": -101.53539,
+      "capacity_mw": 10.0,
+      "turbine_count": 5,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2010
+    },
+    {
+      "name": "Ralls Wind Farm",
+      "county": "Crosby County",
+      "lat": 33.661298,
+      "lon": -101.385802,
+      "capacity_mw": 10.0,
+      "turbine_count": 5,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2011
+    },
+    {
+      "name": "Sunray I",
+      "county": "Moore County",
+      "lat": 35.932096666666666,
+      "lon": -101.88033999999999,
+      "capacity_mw": 9.0,
+      "turbine_count": 6,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Harbor Wind",
+      "county": "Nueces County",
+      "lat": 27.83181,
+      "lon": -97.43915,
+      "capacity_mw": 9.0,
+      "turbine_count": 6,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Green Pastures II",
+      "county": "Baylor County",
+      "lat": 33.63723666666667,
+      "lon": -99.46807333333334,
+      "capacity_mw": 9.0,
+      "turbine_count": 3,
+      "avg_hub_height_m": 92.0,
+      "online_year": 2015
+    },
+    {
+      "name": "JD Wind 9",
+      "county": "Moore County",
+      "lat": 35.809431428571436,
+      "lon": -101.99438285714284,
+      "capacity_mw": 8.75,
+      "turbine_count": 7,
+      "avg_hub_height_m": 72.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Panther Creek II",
+      "county": "Sterling County",
+      "lat": 31.922538000000003,
+      "lon": -101.25415000000001,
+      "capacity_mw": 8.1,
+      "turbine_count": 5,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Sendero",
+      "county": "Zapata County",
+      "lat": 27.14417,
+      "lon": -98.9574125,
+      "capacity_mw": 8.0,
+      "turbine_count": 4,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2015
+    },
+    {
+      "name": "Lubbock Wind Ranch",
+      "county": "Lubbock County",
+      "lat": 33.56929,
+      "lon": -101.76209,
+      "capacity_mw": 7.5,
+      "turbine_count": 3,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2010
+    },
+    {
+      "name": "High Lonesome Expansion",
+      "county": "Crockett County",
+      "lat": 31.045516666666668,
+      "lon": -101.92205666666666,
+      "capacity_mw": 6.9,
+      "turbine_count": 3,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2020
+    },
+    {
+      "name": "Ranchland Wind Project",
+      "county": "Eastland County",
+      "lat": 32.33052,
+      "lon": -99.11416,
+      "capacity_mw": 6.0,
+      "turbine_count": 1,
+      "avg_hub_height_m": 119.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Big Spring II",
+      "county": "Howard County",
+      "lat": 32.213899999999995,
+      "lon": -101.40072333333335,
+      "capacity_mw": 5.75,
+      "turbine_count": 3,
+      "avg_hub_height_m": 78.0,
+      "online_year": 1999
+    },
+    {
+      "name": "Griffin Trail Wind",
+      "county": "Baylor County",
+      "lat": 33.611485,
+      "lon": -99.469645,
+      "capacity_mw": 5.64,
+      "turbine_count": 2,
+      "avg_hub_height_m": 89.0,
+      "online_year": 2021
+    },
+    {
+      "name": "Mozart",
+      "county": "Stonewall County",
+      "lat": 32.974195,
+      "lon": -100.51249,
+      "capacity_mw": 5.0,
+      "turbine_count": 2,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Suzlon Project VII",
+      "county": "Hartley County",
+      "lat": 35.7496,
+      "lon": -102.27259000000001,
+      "capacity_mw": 4.2,
+      "turbine_count": 2,
+      "avg_hub_height_m": 90.0,
+      "online_year": 2011
+    },
+    {
+      "name": "Roscoe",
+      "county": "Scurry County",
+      "lat": 32.5290425,
+      "lon": -100.72519249999999,
+      "capacity_mw": 4.0,
+      "turbine_count": 4,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Inadale (Roscoe IV)",
+      "county": "Scurry County",
+      "lat": 32.5262725,
+      "lon": -100.66941500000001,
+      "capacity_mw": 4.0,
+      "turbine_count": 4,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2009
+    },
+    {
+      "name": "UL Advanced Wind Turbine Test Facility",
+      "county": "Randall County",
+      "lat": 34.96859,
+      "lon": -101.789945,
+      "capacity_mw": 3.67,
+      "turbine_count": 2,
+      "avg_hub_height_m": 83.2,
+      "online_year": 2018
+    },
+    {
+      "name": "Indian Mesa / Aeolus",
+      "county": "Hansford County",
+      "lat": 36.47269,
+      "lon": -101.32789,
+      "capacity_mw": 3.0,
+      "turbine_count": 1,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2003
+    },
+    {
+      "name": "Horse Hollow Expansion",
+      "county": "Taylor County",
+      "lat": 32.243195,
+      "lon": -100.024705,
+      "capacity_mw": 3.0,
+      "turbine_count": 2,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2017
+    },
+    {
+      "name": "Lacy Creek",
+      "county": "Glasscock County",
+      "lat": 31.67971,
+      "lon": -101.28286,
+      "capacity_mw": 2.52,
+      "turbine_count": 1,
+      "avg_hub_height_m": 114.0,
+      "online_year": 2022
+    },
+    {
+      "name": "Champion",
+      "county": "Mitchell County",
+      "lat": 32.3964,
+      "lon": -100.6647,
+      "capacity_mw": 2.3,
+      "turbine_count": 1,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Texas Tech - Nolan",
+      "county": "Nolan County",
+      "lat": 32.3502,
+      "lon": -100.52609,
+      "capacity_mw": 2.0,
+      "turbine_count": 1,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2008
+    },
+    {
+      "name": "Gaines Cavern Wind Project",
+      "county": "Gaines County",
+      "lat": 32.68855,
+      "lon": -103.06245,
+      "capacity_mw": 2.0,
+      "turbine_count": 1,
+      "avg_hub_height_m": 78.0,
+      "online_year": 2012
+    },
+    {
+      "name": "Trent Mesa Repower",
+      "county": "Taylor County",
+      "lat": 32.42665,
+      "lon": -100.14716,
+      "capacity_mw": 1.7,
+      "turbine_count": 1,
+      "avg_hub_height_m": 80.0,
+      "online_year": 2001
+    },
+    {
+      "name": "Inadale (Roscoe IV)",
+      "county": "Mitchell County",
+      "lat": 32.52459,
+      "lon": -100.68189,
+      "capacity_mw": 1.0,
+      "turbine_count": 1,
+      "avg_hub_height_m": 69.0,
+      "online_year": 2009
+    },
+    {
+      "name": "Brazos Wind Ranch",
+      "county": "Borden County",
+      "lat": 32.94392,
+      "lon": -101.32668,
+      "capacity_mw": 1.0,
+      "turbine_count": 1,
+      "avg_hub_height_m": 60.0,
+      "online_year": 2003
+    },
+    {
+      "name": "American Windmill Museum",
+      "county": "Lubbock County",
+      "lat": 33.58089,
+      "lon": -101.82389,
+      "capacity_mw": 0.66,
+      "turbine_count": 1,
+      "avg_hub_height_m": 50.0,
+      "online_year": 2005
+    },
+    {
+      "name": "Apogee Stadium Wind",
+      "county": "Denton County",
+      "lat": 33.20113,
+      "lon": -97.16092666666667,
+      "capacity_mw": 0.3,
+      "turbine_count": 3,
+      "avg_hub_height_m": 37.0,
+      "online_year": 2012
+    },
+    {
+      "name": "NORESCO",
+      "county": "Howard County",
+      "lat": 32.2276,
+      "lon": -101.50759,
+      "capacity_mw": 0.1,
+      "turbine_count": 1,
+      "avg_hub_height_m": null,
+      "online_year": 2009
+    },
+    {
+      "name": "Mountain Peak Special Utility District",
+      "county": "Ellis County",
+      "lat": 32.42145,
+      "lon": -97.02425,
+      "capacity_mw": 0.1,
+      "turbine_count": 1,
+      "avg_hub_height_m": null,
+      "online_year": 2010
+    },
+    {
+      "name": "WTAMU",
+      "county": "Randall County",
+      "lat": 34.96584,
+      "lon": -101.80251,
+      "capacity_mw": 0.06,
+      "turbine_count": 1,
+      "avg_hub_height_m": null,
+      "online_year": null
+    }
+  ]
+}

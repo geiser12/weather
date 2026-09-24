@@ -3,42 +3,16 @@
 Texas Multi-Model Weather Viewer – Ventusky-style WebGL edition
 ===============================================================
 All settings are configured below – no command-line arguments needed.
-
-What changed vs. the PNG edition
---------------------------------
-  * NO images are rendered. Python fetches + cleans the model data and writes
-    ONE compact binary data file (grid_data.js, 16-bit quantised, base64) plus
-    index.html. The browser draws every map on the GPU (WebGL2).
-  * Smooth raster instead of contourf: bicubic (Catmull-Rom) interpolation in
-    the fragment shader, clamped to the local min/max of the four surrounding
-    cells, so there is no spline ringing and no 0-vs-1 % slivers.
-  * Fixed, non-linear, Ventusky-style colour scales with a transparent low end
-    (tiny precip / PoP values simply don't draw). Same colour = same value for
-    every hour and every model.
-  * Real base map under the data (Natural Earth land/sea + state borders),
-    Texas outline on top, optional dimming of everything outside Texas.
-  * Overlays drawn client-side with halo text: animated wind flow, labelled
-    isobars, isotherms, city values, H/L markers.
-  * Hourly OR 3-hour precipitation as separate layers (no more identical maps
-    on consecutive slider positions), plus pressure (MSL).
-  * Smooth cross-fade between hours while playing.
-  * Correct map aspect ratio (cos(latitude) correction) and click-probe maths.
-
-NEW (this version)
-------------------
-  * USGS USWTDB wind turbine locations overlaid as small black dots when the
-    Wind Speed (80m) layer is selected.
-
 Outputs (in OUTPUT_DIR):  index.html  +  grid_data.js   (works from file://)
-
 Needs:  numpy pandas scipy requests openmeteo_requests requests_cache retry_requests
-Offline test:  TX_DEMO=1 python texas_weather_viewer.py   (synthetic data)
 """
 
 from __future__ import annotations
 
 import base64
+import io
 import json
+import zipfile
 import math
 import os
 import time
@@ -51,17 +25,17 @@ import numpy as np
 import pandas as pd
 import requests
 
+from scripts.uswtdb_fleet import fetch_tx_wind_fleet, demo_fleet
+from scripts.wind_power_model import fleet_mw_timeseries, fleet_total_capacity_mw
+
 # ============================================================================
 # SETTINGS – edit these
 # ============================================================================
 
-SPACING = 0.75                  # map grid only (Open-Meteo). Keep coarse to avoid rate limits.
+SPACING = 0.75                  # grid spacing in degrees (0.5 recommended; 0.75/1.0 = fewer API calls)
 FORECAST_DAYS = 2              # number of days to fetch
 BATCH_SIZE = 100               # points per API request (lower = safer against rate limits)
 OUTPUT_DIR = "tx_model_viewer"
-
-# Max forecast hour to pull from a single HRRR cycle (00/06/12/18Z runs go to 48).
-HERBIE_HRRR_MAX_FXX = 48
 SLEEP_BETWEEN_BATCHES = 1.8    # seconds between successful API calls
 FETCH_DEADLINE_SECONDS = 600
 
@@ -81,15 +55,13 @@ BASEMAP_CACHE = Path(".texas_basemap_cache.json")
 BASEMAP_MAX_AGE_DAYS = 30
 BASEMAP_PAD_DEG = 1.0          # geometry is clipped to the map bounds + this pad
 
-# Wind-turbine inventory (USGS USWTDB) – free, no API key, public-repo safe.
-WIND_TURBINES_CACHE = Path(".texas_wind_turbines_cache.json")
-WIND_TURBINES_MAX_AGE_DAYS = 14
-# Optional: set EIA_API_KEY in the environment for future EIA-860 cross-checks.
-# Never hard-code the key; in GitHub Actions store it as a repository secret.
-EIA_API_KEY = os.environ.get("EIA_API_KEY") or os.environ.get("TX_EIA_API_KEY") or ""
-
 # Synthetic data instead of the API (for testing the viewer offline).
 DEMO_MODE = os.environ.get("TX_DEMO", "0") == "1"
+
+# Wind MW Forecast tab: force a fresh USWTDB fleet fetch instead of using the
+# local cache (wind_fleet_tx.json). USWTDB updates quarterly, so this rarely
+# needs to be true - re-run with --refresh-fleet or set the env var below.
+WIND_FLEET_FORCE_REFRESH = os.environ.get("TX_REFRESH_FLEET", "0") == "1"
 
 # ============================================================================
 
@@ -221,12 +193,6 @@ TIGER_URL = ("https://tigerweb.geo.census.gov/arcgis/rest/services/"
              "TIGERweb/State_County/MapServer/15/query")
 NE_LAND_URL = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/"
                "master/geojson/ne_50m_land.geojson")
-
-# USWTDB (USGS) – free, no key. PostgREST-style filters.
-USWTDB_URL = "https://energy.usgs.gov/api/uswtdb/v1/turbines"
-# Alternate base if the primary is flaky:
-# USWTDB_URL = "https://eersc.usgs.gov/api/uswtdb/v1/turbines"
-
 
 
 # ── Grid / fetch helpers ──────────────────────────────────────────────────
@@ -479,6 +445,296 @@ def clean_arrays(arrs, models, variables):
     return missing
 
 
+
+def _scrape_latest_ercot_stwpf():
+    """Scrape the newest ERCOT NP4-742-CD/STWPF publication using the same
+    IceDocListJsonWS -> mirDownload flow used elsewhere in the ERCOT stack."""
+    report_id = 14787
+    try:
+        list_url = (
+            "https://www.ercot.com/misapp/servlets/IceDocListJsonWS"
+            f"?reportTypeId={report_id}&_={int(time.time() * 1000)}"
+        )
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+        })
+        r = session.get(list_url, timeout=30)
+        r.raise_for_status()
+        docs = pd.json_normalize(
+            r.json(),
+            record_path=["ListDocsByRptTypeRes", "DocumentList"]
+        )
+        if docs.empty:
+            return pd.DataFrame()
+        docs["DocUrl"] = (
+            "https://www.ercot.com/misdownload/servlets/mirDownload?doclookupId="
+            + docs["Document.DocID"].astype(str)
+        )
+        docs["PublishDate"] = pd.to_datetime(
+            docs["Document.PublishDate"], format="mixed", errors="coerce"
+        )
+        docs = docs[docs["Document.ConstructedName"].astype(str).str.endswith("_csv.zip")]
+        now_ct = datetime.now(ZoneInfo(TIMEZONE))
+        today_docs = docs[docs["PublishDate"].dt.date == now_ct.date()]
+        if not today_docs.empty:
+            docs = today_docs
+        else:
+            print("  [warn] no STWPF publication dated today; using newest available publication")
+        doc_url = docs.sort_values("PublishDate", ascending=False)["DocUrl"].iloc[0]
+
+        z = session.get(doc_url, timeout=60)
+        z.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(z.content)) as zf:
+            csv_files = [n for n in zf.namelist() if n.lower().endswith(".csv")]
+            if not csv_files:
+                return pd.DataFrame()
+            df = pd.read_csv(io.BytesIO(zf.read(csv_files[0])))
+
+        # Keep the parser tolerant to the exact capitalization used by the
+        # published CSV while requiring the three fields we actually need.
+        cols = {str(c).strip().upper(): c for c in df.columns}
+        required = ["DELIVERY_DATE", "HOUR_ENDING", "STWPF_SYSTEM_WIDE"]
+        if not all(c in cols for c in required):
+            print(f"  [warn] ERCOT STWPF report missing columns; found: {list(df.columns)}")
+            return pd.DataFrame()
+
+        out = df[[cols[c] for c in required]].copy()
+        out.columns = ["Delivery Date", "Hour Ending", "STWPF"]
+        out["Delivery Date"] = pd.to_datetime(
+            out["Delivery Date"], format="mixed", errors="coerce"
+        )
+        he = (
+            out["Hour Ending"].astype(str)
+            .str.extract(r"(\d+)", expand=False)
+        )
+        out["Hour Ending"] = pd.to_numeric(he, errors="coerce")
+        out = out.dropna(subset=["Delivery Date", "Hour Ending", "STWPF"])
+        out["Hour Ending"] = out["Hour Ending"].astype(int)
+        out["Target Time"] = (
+            out["Delivery Date"].dt.tz_localize(None)
+            + pd.to_timedelta(out["Hour Ending"], unit="h")
+        )
+        out["STWPF"] = pd.to_numeric(out["STWPF"], errors="coerce")
+        out = out.dropna(subset=["STWPF"])
+        out = out.sort_values("Target Time").drop_duplicates("Target Time", keep="last")
+        print(
+            f"  ERCOT STWPF: {len(out)} hourly points, "
+            f"{out['Target Time'].min()} -> {out['Target Time'].max()}"
+        )
+        return out[["Target Time", "STWPF"]].reset_index(drop=True)
+    except Exception as e:
+        print(f"  [warn] ERCOT STWPF scrape failed: {e}")
+        return pd.DataFrame()
+
+
+def _wind_farm_points(fleet):
+    """Convert cached TX wind-farm list into map-ready farm points."""
+    if fleet is None:
+        return []
+
+    # wind_fleet_tx.json stores farms as a list of dictionaries
+    if isinstance(fleet, list):
+        farms = fleet
+    elif isinstance(fleet, dict):
+        # Handle either {"farms": [...]} or a direct farm dictionary
+        farms = fleet.get("farms", [])
+        if isinstance(farms, dict):
+            farms = list(farms.values())
+    elif isinstance(fleet, pd.DataFrame):
+        farms = fleet.to_dict("records")
+    else:
+        return []
+
+    points = []
+
+    for farm in farms:
+        if not isinstance(farm, dict):
+            continue
+
+        # Case-insensitive field lookup
+        lookup = {
+            str(k).strip().lower(): v
+            for k, v in farm.items()
+        }
+
+        def get_value(*names):
+            for name in names:
+                if name.lower() in lookup:
+                    return lookup[name.lower()]
+            return None
+
+        lat = get_value("lat", "latitude")
+        lon = get_value("lon", "longitude", "lng")
+
+        if lat is None or lon is None:
+            continue
+
+        try:
+            lat = float(lat)
+            lon = float(lon)
+        except (TypeError, ValueError):
+            continue
+
+        capacity = get_value(
+            "capacity_mw",
+            "capacity",
+            "mw",
+            "nameplate_capacity_mw",
+        )
+
+        try:
+            capacity = float(capacity) if capacity is not None else 0.0
+        except (TypeError, ValueError):
+            capacity = 0.0
+
+        name = get_value(
+            "name",
+            "project_name",
+            "farm_name",
+            "facility_name",
+        )
+
+        county = get_value("county")
+
+        points.append({
+            "name": str(name) if name is not None else "Wind Farm",
+            "county": str(county) if county is not None else "",
+            "lat": lat,
+            "lon": lon,
+            "capacity_mw": capacity,
+        })
+
+    return points
+
+def build_wind_forecast_payload(arrs, lats, lons, timestamps, models):
+    """Build the main-page wind MW chart using the Open-Meteo window and
+    the latest ERCOT STWPF forecast, with all hours aligned to HE labels."""
+    print("Wind MW Forecast: loading TX wind fleet (USWTDB)...")
+
+    try:
+        fleet = demo_fleet() if DEMO_MODE else fetch_tx_wind_fleet(
+            force=WIND_FLEET_FORCE_REFRESH
+        )
+    except Exception as e:
+        print(f"  [warn] could not load wind fleet ({e}); wind chart will be empty")
+        return None
+
+    total_cap = fleet_total_capacity_mw(fleet)
+
+    # Open-Meteo is the authoritative forecast window
+    weather_dt = pd.DatetimeIndex(pd.to_datetime(timestamps))
+    weather_times = weather_dt.strftime("%Y-%m-%dT%H:%M").tolist()
+    weather_start = weather_dt.min()
+    weather_end = weather_dt.max()
+
+    series = {}
+
+    for m in models:
+        wind_field = arrs[m]["wind_speed_80m"]
+        mw = fleet_mw_timeseries(wind_field, lats, lons, fleet)
+        series[MODEL_LABELS.get(m, m)] = [
+            round(float(x), 1) for x in mw
+        ]
+
+    # ERCOT STWPF
+    ercot = pd.DataFrame()
+
+    if not DEMO_MODE:
+        ercot = _scrape_latest_ercot_stwpf()
+
+    ercot_times = []
+    ercot_values = []
+
+    if not ercot.empty:
+        ercot = ercot.copy()
+        ercot["Target Time"] = pd.to_datetime(
+            ercot["Target Time"], errors="coerce"
+        )
+        ercot["STWPF"] = pd.to_numeric(
+            ercot["STWPF"], errors="coerce"
+        )
+        ercot = ercot.dropna(subset=["Target Time", "STWPF"])
+
+        # ERCOT STWPF is already supplied in HE convention:
+        # 01:00 = HE1, 02:00 = HE2, ..., 00:00 = HE24.
+        #
+        # Do NOT shift these timestamps by +/- 1 hour.
+        #
+        # Clip ERCOT to the exact Open-Meteo forecast window.
+        before_clip = len(ercot)
+
+        ercot = ercot[
+            ercot["Target Time"].between(
+                weather_start,
+                weather_end,
+                inclusive="both",
+            )
+        ].copy()
+
+        print(
+            f"  ERCOT STWPF clipped to Open-Meteo window: "
+            f"{len(ercot)}/{before_clip} hours"
+        )
+
+        if not ercot.empty:
+            print(
+                f"    window: "
+                f"{ercot['Target Time'].min()} -> "
+                f"{ercot['Target Time'].max()}"
+            )
+
+            ercot_times = ercot["Target Time"].dt.strftime(
+                "%Y-%m-%dT%H:%M"
+            ).tolist()
+
+            ercot_values = [
+                round(float(x), 1)
+                for x in ercot["STWPF"]
+            ]
+
+    # Use ONLY the Open-Meteo hours as the chart time axis.
+    # ERCOT is now clipped to this same window.
+    all_times = weather_times
+
+    # Align every weather model to the common weather-time axis
+    for name in list(series):
+        lookup = dict(zip(weather_times, series[name]))
+        series[name] = [lookup.get(t) for t in all_times]
+
+    # Align ERCOT to the same weather-time axis
+    if ercot_times:
+        lookup = dict(zip(ercot_times, ercot_values))
+        series["ERCOT STWPF"] = [
+            lookup.get(t) for t in all_times
+        ]
+
+    farm_points = _wind_farm_points(fleet)
+
+    print(
+        f"  wind forecast: {len(all_times)} hours, "
+        f"{len(farm_points)} farms, "
+        f"{total_cap:,.0f} MW fleet capacity"
+    )
+
+    return {
+        "times": all_times,
+        "series": series,
+        "fleetCapacityMw": round(total_cap, 1),
+        "fleetFarmCount": len(farm_points),
+        "windFarms": farm_points,
+        "ercotAvailable": bool(ercot_times),
+        "weatherHours": len(weather_times),
+        "note": (
+            "Weather-model lines are model-derived estimates using the USWTDB TX "
+            "wind-farm inventory and a generic power curve. ERCOT STWPF is the "
+            "published system-wide wind forecast scraped from the latest ERCOT "
+            "NP4-742-CD publication."
+        ),
+    }
+
 def quantize(a, lo, hi):
     q = np.clip((a - lo) / (hi - lo), 0.0, 1.0) * 65535.0
     return np.rint(q).astype("<u2")
@@ -664,79 +920,6 @@ def compute_inside_mask(lats, lons, texas_rings, spacing):
     return inside.reshape(LON.shape)
 
 
-# ── Wind turbines (USWTDB) – map overlay only ─────────────────────────────
-
-def load_wind_turbines():
-    """Fetch / cache Texas utility-scale turbine locations from USWTDB (no API key).
-
-    Returns list of {lat, lon} for map dots when wind speed is selected.
-    """
-    if WIND_TURBINES_CACHE.exists():
-        try:
-            cached = json.loads(WIND_TURBINES_CACHE.read_text())
-            age_days = (time.time() - WIND_TURBINES_CACHE.stat().st_mtime) / 86400
-            turbines = cached.get("turbines") or []
-            if age_days < WIND_TURBINES_MAX_AGE_DAYS and turbines:
-                print(f"  wind turbines: using cache ({len(turbines)} sites)")
-                return turbines
-        except Exception:
-            pass
-
-    print("  wind turbines: downloading USWTDB (Texas)…")
-    turbines = []
-    select = "case_id,ylat,xlong,t_cap,t_state"
-    offset = 0
-    page = 2000
-    b = TEXAS_BOUNDS
-    while True:
-        url = (
-            f"{USWTDB_URL}?t_state=eq.TX&t_cap=gt.0"
-            f"&ylat=gte.{b['min_lat'] - 0.5}&ylat=lte.{b['max_lat'] + 0.5}"
-            f"&xlong=gte.{b['min_lon'] - 0.5}&xlong=lte.{b['max_lon'] + 0.5}"
-            f"&select={select}&limit={page}&offset={offset}"
-        )
-        try:
-            r = requests.get(url, timeout=90, headers={"Accept": "application/json"})
-            r.raise_for_status()
-            batch = r.json()
-        except Exception as e:
-            print(f"  [warn] USWTDB page offset={offset} failed: {e}")
-            break
-        if not batch:
-            break
-        for row in batch:
-            try:
-                lat = float(row["ylat"])
-                lon = float(row["xlong"])
-                if not (b["min_lat"] - 0.3 <= lat <= b["max_lat"] + 0.3):
-                    continue
-                if not (b["min_lon"] - 0.3 <= lon <= b["max_lon"] + 0.3):
-                    continue
-                turbines.append({"lat": round(lat, 5), "lon": round(lon, 5)})
-            except (TypeError, ValueError, KeyError):
-                continue
-        print(f"    … {len(turbines)} turbines so far (offset {offset})")
-        if len(batch) < page:
-            break
-        offset += page
-        time.sleep(0.3)
-
-    if not turbines:
-        print("  [warn] USWTDB returned no turbines")
-        return []
-
-    try:
-        WIND_TURBINES_CACHE.write_text(json.dumps({
-            "fetched_at": datetime.now(ZoneInfo(TIMEZONE)).isoformat(),
-            "n_turbines": len(turbines),
-            "turbines": turbines,
-        }))
-    except Exception:
-        pass
-    print(f"  wind turbines: {len(turbines)} units for map overlay")
-    return turbines
-
-
 # ── Synthetic data (TX_DEMO=1) ────────────────────────────────────────────
 
 def make_demo_data(lats, lons, models):
@@ -798,10 +981,33 @@ header {
 }
 .title { font-size: 17px; font-weight: 650; }
 .subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.tabbar { display: flex; gap: 4px; }
+.tabbar button {
+  background: transparent; border: 1px solid transparent; color: var(--muted);
+  border-radius: 6px; padding: 7px 13px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.tabbar button:hover { color: var(--text); }
+.tabbar button.active { background: #1a2430; border-color: #334253; color: var(--text); }
 
-
-.tab-btn:hover { color: var(--text); }
-
+#mapsView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#windDock { display: none; flex: 0 0 35%; min-height: 170px; background: var(--panel);
+  border-top: 1px solid var(--border); position: relative; flex-direction: column; padding: 7px 18px 4px; }
+#windDock.on { display: flex; }
+.wind-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 20px; }
+.wind-head h2 { font-size: 13px; margin: 0; font-weight: 650; }
+.wind-head .meta { font-size: 10.5px; color: var(--muted); }
+.wind-note { font-size: 10px; color: var(--muted); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#windChartWrap { position: relative; flex: 1; min-height: 120px; }
+#windChart { position: absolute; inset: 0; width: 100%; height: 100%; }
+#windChartTip { display: none; position: absolute; z-index: 5; pointer-events: none;
+  background: rgba(17,24,33,.96); border: 1px solid var(--border); border-radius: 6px;
+  padding: 7px 9px; font-size: 10.5px; white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.wind-legend { display: flex; gap: 7px 14px; flex-wrap: wrap; align-items: center; min-height: 22px; }
+.wind-legend .sw { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--text); border: 0;
+  background: transparent; padding: 2px 0; cursor: pointer; font-family: inherit; }
+.wind-legend .sw.off { opacity: .35; }
+.wind-legend .dot { width: 9px; height: 3px; border-radius: 2px; display: inline-block; }
 .controls {
   flex: none; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 14px;
   padding: 8px 18px; background: #151e29; border-bottom: 1px solid var(--border);
@@ -839,14 +1045,6 @@ select:focus-visible, button:focus-visible, input:focus-visible { outline: 2px s
 .mapbox { position: relative; flex: none; cursor: crosshair; }
 .mapbox canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
 
-
-
-
-
-
-#windMeta strong { color: var(--text); font-weight: 600; }
-#windNote { font-size: 11px; color: var(--muted); max-width: 720px; line-height: 1.4; }
-
 .legend {
   flex: none; height: 44px; padding: 4px 18px 0; background: var(--panel);
   border-top: 1px solid var(--border); display: flex; align-items: center; gap: 14px;
@@ -871,14 +1069,21 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   box-shadow: 0 8px 28px rgba(0,0,0,0.45); font-size: 12px;
 }
 
+#windDock.on + .legend { }
+@media (max-height: 720px) and (min-width: 769px) {
+  #windDock { flex-basis: 22%; min-height: 145px; }
+}
+
 /* ── Mobile / narrow screens ─────────────────────────────────────── */
 @media (max-width: 768px) {
   html, body {
-    overflow: auto;
+    overflow: auto;                 /* allow vertical scroll */
     height: auto;
     min-height: 100%;
   }
-  body { display: block; }
+  body {
+    display: block;                 /* drop the flex column that was locking heights */
+  }
 
   header {
     height: auto;
@@ -892,8 +1097,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   .controls {
     padding: 8px 12px;
     gap: 8px 10px;
+    /* keep flex-wrap; just give it room to grow */
   }
-  .controls > div { min-width: 0; }
+  .controls > div {
+    min-width: 0;
+  }
+  /* Make the four model selects stack nicer */
   #modelSelects {
     flex-wrap: wrap;
     width: 100%;
@@ -909,18 +1118,19 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   }
   #opacityRange { width: 70px; }
 
+  /* Maps area – give it a sensible minimum height so it doesn't collapse */
   #maps {
     min-height: 52vh;
     height: 52vh;
   }
+  #windDock.on { min-height: 190px; flex-basis: 26%; }
   #maps.layout-2,
   #maps.layout-3,
   #maps.layout-4 {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr;     /* single column on phones */
     grid-template-rows: repeat(auto-fit, minmax(180px, 1fr));
   }
-
-  
+  /* When user picks 1-panel it already looks good */
 
   .legend {
     height: auto;
@@ -944,25 +1154,33 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   #timeLabel { font-size: 12px; }
   .hour-ticks { font-size: 8px; padding: 0 6px; }
 
+  /* Probe needs a bit more room on small screens */
   #probe {
     max-width: min(290px, 92vw);
     font-size: 11px;
   }
 
+  /* Hide the least-critical desktop-only hint */
   #probeHint { display: none; }
 }
 
+/* Extra-small phones */
 @media (max-width: 420px) {
-  .controls { gap: 6px 8px; }
+  .controls {
+    gap: 6px 8px;
+  }
   select, button {
     padding: 5px 8px;
     font-size: 11px;
   }
-  .model-select-wrap { flex: 1 1 100%; }
+  .model-select-wrap {
+    flex: 1 1 100%;
+  }
   #maps {
     min-height: 46vh;
     height: 46vh;
   }
+  #windDock.on { min-height: 190px; flex-basis: 28%; }
 }
 #probe .probe-title { font-weight: 650; font-size: 12px; margin-bottom: 2px; color: var(--accent); }
 #probe .probe-loc { color: var(--muted); font-size: 10px; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
@@ -983,7 +1201,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   <div id="lastUpdated" style="font-size:11px; color:var(--muted);"></div>
 </header>
 
-<div class="controls" id="mapControls">
+<div id="mapsView">
+<div class="controls">
   <div><label class="lbl" for="dateSelect">Date</label><select id="dateSelect"></select></div>
   <div><label class="lbl" for="varSelect">Variable</label><select id="varSelect"></select></div>
   <div>
@@ -1015,7 +1234,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
     <label><input type="checkbox" id="chkIsot"> Isotherms</label>
     <label><input type="checkbox" id="chkCities" checked> Values</label>
     <label><input type="checkbox" id="chkHL" checked> H/L</label>
-    <label><input type="checkbox" id="chkFarms"> Wind farms</label>
+    <label><input type="checkbox" id="chkWindFarms" checked> Wind Farms</label>
+    <label><input type="checkbox" id="chkWindMW"> Show Wind Forecast MW</label>
   </div>
   <div><label class="lbl" for="opacityRange">Layer opacity</label><input type="range" id="opacityRange" min="20" max="100" value="100"></div>
   <div>
@@ -1037,9 +1257,22 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   <div class="panel" id="panel3"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
 </div>
 
-<div class="legend" id="mapLegend"><span id="legendLabel"></span><canvas id="legend"></canvas></div>
+<div id="windDock">
+  <div class="wind-head">
+    <h2>Wind MW Forecast</h2>
+    <span class="meta" id="windMeta"></span>
+  </div>
+  <div class="wind-note" id="windNote"></div>
+  <div id="windChartWrap">
+    <canvas id="windChart"></canvas>
+    <div id="windChartTip"></div>
+  </div>
+  <div class="wind-legend" id="windLegend"></div>
+</div>
 
-<div class="timeline" id="mapTimeline">
+<div class="legend"><span id="legendLabel"></span><canvas id="legend"></canvas></div>
+
+<div class="timeline">
   <span id="timeLabel"></span>
   <div>
     <input type="range" id="hourSlider" min="0" max="23" value="12" step="1" aria-label="Hour">
@@ -1047,6 +1280,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
       <span>HE 1</span><span>HE 7</span><span>HE 13</span><span>HE 19</span><span>HE 24</span>
     </div>
   </div>
+</div>
 </div>
 
 <div id="probe"></div>
@@ -1090,9 +1324,11 @@ const dateSelect = $("dateSelect"), varSelect = $("varSelect"), layoutSelect = $
 const hourSlider = $("hourSlider"), timeLabel = $("timeLabel"), playBtn = $("playBtn");
 const probeEl = $("probe"), mapsEl = $("maps"), legendCv = $("legend"), legendLabel = $("legendLabel");
 const speedSelect = $("speedSelect"), outsideSelect = $("outsideSelect"), opacityRange = $("opacityRange");
+const chkWindFarms = $("chkWindFarms"), chkWindMW = $("chkWindMW"), windDock = $("windDock"), windChart = $("windChart");
+const windChartWrap = $("windChartWrap"), windChartTip = $("windChartTip"), windLegend = $("windLegend");
+const windMeta = $("windMeta"), windNote = $("windNote");
 const modelSelects = [0,1,2,3].map(i => $("modelSelect" + i));
 const modelWraps = [0,1,2,3].map(i => $("modelWrap" + i));
-const mapControls = $("mapControls"), mapLegend = $("mapLegend"), mapTimeline = $("mapTimeline");
 
 /* timeline */
 const dates = [], dayIdx = {}, DATE_OF = [], HOUR_OF = [];
@@ -1103,10 +1339,10 @@ DATA.times.forEach((s, t) => {
 });
 
 /* state */
-let currentVar = VARS[0], tPos = 0, layoutCount = 4;
+let currentVar = "wind_speed_80m", tPos = 0, layoutCount = 4;
 let panelModels = MODELS.slice();
 let playing = false, rafId = null, lastFrame = 0, lastOverlayT = -99, hoursPerSec = 1.4;
-const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, farms: false, outside: "dim", opacity: 1 };
+const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, windFarms: true, outside: "dim", opacity: 1 };
 
 /* ── data access ──────────────────────────────────────────────────── */
 function isMissing(model, v) { return (DATA.missing[model] || []).indexOf(v) >= 0; }
@@ -1504,14 +1740,21 @@ class Panel {
     ctx.beginPath(); tracePath(ctx, BASE.texas, X, Y);
     ctx.lineJoin = "round"; ctx.lineWidth = 1.1; ctx.strokeStyle = "rgba(24,32,44,0.9)"; ctx.stroke();
 
-    /* USWTDB wind turbines — small grey dots when "Wind farms" is checked */
-    if (opts.farms && DATA.windFarms && DATA.windFarms.length) {
-      ctx.fillStyle = "rgba(90,90,90,0.85)";  /* grey; change here for color */
-      for (const p of DATA.windFarms) {
-        const px = X(p[1]), py = Y(p[0]);
-        if (px < -2 || px > W + 2 || py < -2 || py > H + 2) continue;
-        ctx.fillRect(px - 0.75, py - 0.75, 1.5, 1.5);
+    /* Wind-farm locations: intentionally shown only on the wind-speed map.
+       The source is the same USWTDB fleet used for the MW conversion.
+       Farms live under DATA.windForecast.windFarms (not top-level DATA.windFarms). */
+    const farms = (DATA.windForecast && DATA.windForecast.windFarms) || [];
+    if (opts.windFarms && v === "wind_speed_80m" && farms.length) {
+      ctx.save();
+      ctx.fillStyle = "rgba(100,105,110,0.95)";   /* light grey */
+      ctx.strokeStyle = "rgba(50,55,62,0.55)";
+      ctx.lineWidth = 0.65;
+      for (const f of farms) {
+        const x = X(f.lon), y = Y(f.lat);
+        if (x < -3 || x > W + 3 || y < -3 || y > H + 3) continue;
+        ctx.beginPath(); ctx.arc(x, y, 2.15, 0, 6.2832); ctx.fill(); ctx.stroke();
       }
+      ctx.restore();
     }
 
     if (this.missing) {
@@ -1599,6 +1842,162 @@ function drawLegend() {
   });
 }
 
+
+/* ── wind MW chart ───────────────────────────────────────────────── */
+const WIND_COLORS = ["#5ba7ff", "#f2a93b", "#7bd389", "#c084fc", "#f26b6b"];
+const windChartState = { visible: {}, hover: -1, dpr: 1 };
+
+function windSeriesNames() {
+  return DATA.windForecast && DATA.windForecast.series
+    ? Object.keys(DATA.windForecast.series) : [];
+}
+
+function windChartX(t, n, left, width) {
+  return n <= 1 ? left : left + t / (n - 1) * width;
+}
+
+function drawWindChart() {
+  const wf = DATA.windForecast;
+  if (!wf || !wf.times || !wf.times.length || !wf.series) {
+    windDock.classList.remove("on");
+    return;
+  }
+  const cw = windChartWrap.clientWidth, ch = windChartWrap.clientHeight;
+  if (cw < 40 || ch < 40) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  windChartState.dpr = dpr;
+  windChart.width = Math.round(cw * dpr); windChart.height = Math.round(ch * dpr);
+  const ctx = windChart.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+
+  const left = 42, right = 10, top = 8, bottom = 22;
+  const w = Math.max(20, cw - left - right), h = Math.max(20, ch - top - bottom);
+  const names = windSeriesNames().filter(n => windChartState.visible[n] !== false);
+  const allVals = [];
+  for (const n of names) for (const v of (wf.series[n] || [])) if (v != null && Number.isFinite(v)) allVals.push(v);
+  const cap = Number(wf.fleetCapacityMw) || 0;
+  const ymax = Math.max(100, cap, allVals.length ? Math.max(...allVals) : 100) * 1.05;
+  const y = v => top + h - (v / ymax) * h;
+
+  ctx.font = "9px " + FONT; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  ctx.strokeStyle = "rgba(147,160,174,.16)"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const yy = top + h * i / 4;
+    ctx.beginPath(); ctx.moveTo(left, yy); ctx.lineTo(left + w, yy); ctx.stroke();
+    const val = ymax * (1 - i / 4);
+    ctx.fillStyle = "#93a0ae"; ctx.fillText(Math.round(val).toLocaleString(), left - 5, yy);
+  }
+
+  if (cap > 0) {
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = "rgba(220,225,230,.32)";
+    ctx.beginPath(); ctx.moveTo(left, y(cap)); ctx.lineTo(left + w, y(cap)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  const times = wf.times, n = times.length;
+  ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = "#93a0ae";
+  const tickCount = Math.min(8, Math.max(2, Math.floor(w / 90)));
+  for (let i = 0; i < tickCount; i++) {
+    const k = Math.round(i * (n - 1) / (tickCount - 1));
+    const xx = windChartX(k, n, left, w);
+    /* HE convention: timestamp hour H (0–23) → HE H+1 (HE 1 … HE 24). e.g. 20:00 / 8pm → HE 21 */
+    const hour = parseInt(times[k].slice(11, 13), 10);
+    const he = hour + 1;  /* 0→1, 20→21, 23→24 */
+    const d = new Date(times[k].slice(0, 10) + "T12:00:00");
+    const dayLabel = d.toLocaleDateString(undefined, {month: "short", day: "numeric"});
+    ctx.fillText(dayLabel + " HE " + he, xx, top + h + 5);
+  }
+
+  windSeriesNames().forEach((name, si) => {
+    if (windChartState.visible[name] === false) return;
+    const vals = wf.series[name] || [];
+    ctx.strokeStyle = WIND_COLORS[si % WIND_COLORS.length];
+    ctx.lineWidth = name === "ERCOT STWPF" ? 2.2 : 1.8;
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < n; i++) {
+      const v = vals[i];
+      if (v == null || !Number.isFinite(v)) { started = false; continue; }
+      const xx = windChartX(i, n, left, w), yy = y(v);
+      if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy);
+    }
+    ctx.stroke();
+  });
+
+  if (windChartState.hover >= 0 && windChartState.hover < n) {
+    const i = windChartState.hover, xx = windChartX(i, n, left, w);
+    ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xx, top); ctx.lineTo(xx, top + h); ctx.stroke();
+    windSeriesNames().forEach((name, si) => {
+      if (windChartState.visible[name] === false) return;
+      const v = (wf.series[name] || [])[i];
+      if (v == null || !Number.isFinite(v)) return;
+      ctx.fillStyle = WIND_COLORS[si % WIND_COLORS.length];
+      ctx.beginPath(); ctx.arc(xx, y(v), 3, 0, 6.2832); ctx.fill();
+    });
+  }
+}
+
+function updateWindLegend() {
+  windLegend.innerHTML = "";
+  if (!DATA.windForecast) return;
+  windSeriesNames().forEach((name, i) => {
+    if (!(name in windChartState.visible)) windChartState.visible[name] = true;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "sw" + (windChartState.visible[name] ? "" : " off");
+    const dot = document.createElement("span");
+    dot.className = "dot"; dot.style.background = WIND_COLORS[i % WIND_COLORS.length];
+    b.appendChild(dot); b.appendChild(document.createTextNode(name));
+    b.onclick = () => { windChartState.visible[name] = !windChartState.visible[name]; updateWindLegend(); drawWindChart(); };
+    windLegend.appendChild(b);
+  });
+}
+
+function updateWindDock() {
+  const on = !!chkWindMW.checked;
+  windDock.classList.toggle("on", on);
+  if (!on) return;
+  const wf = DATA.windForecast;
+  if (!wf) {
+    windMeta.textContent = "Unavailable";
+    windNote.textContent = "Wind-fleet or ERCOT STWPF data could not be loaded.";
+    return;
+  }
+  windMeta.textContent = `${wf.fleetFarmCount.toLocaleString()} farms • ${wf.fleetCapacityMw.toLocaleString()} MW`;
+  windNote.textContent = wf.note + (wf.ercotAvailable ? "" : " ERCOT STWPF was unavailable for this run.");
+  updateWindLegend();
+  requestAnimationFrame(drawWindChart);
+}
+
+windChart.addEventListener("mousemove", e => {
+  const wf = DATA.windForecast; if (!wf || !wf.times.length || !windDock.classList.contains("on")) return;
+  const r = windChart.getBoundingClientRect(), x = e.clientX - r.left;
+  const left = 42, right = 10, w = Math.max(20, r.width - left - right);
+  const i = Math.max(0, Math.min(wf.times.length - 1, Math.round((x - left) / w * (wf.times.length - 1))));
+  windChartState.hover = i; drawWindChart();
+  /* HE convention to match map timeline and ERCOT HE labels */
+  const hour = parseInt(wf.times[i].slice(11, 13), 10);
+  const he = hour + 1;
+  const d = new Date(wf.times[i].slice(0, 10) + "T12:00:00");
+  let html = "<b>" + d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}) +
+             "  •  HE " + he + " CT</b>";
+  for (const [si,name] of windSeriesNames().entries()) {
+    if (windChartState.visible[name] === false) continue;
+    const v = (wf.series[name] || [])[i];
+    html += "<br><span style='color:" + WIND_COLORS[si % WIND_COLORS.length] + "'>●</span> " +
+            name + ": " + (v == null ? "—" : Number(v).toLocaleString(undefined,{maximumFractionDigits:0}) + " MW");
+  }
+  windChartTip.innerHTML = html; windChartTip.style.display = "block";
+  windChartTip.style.left = Math.min(Math.max(6, x + 10), r.width - windChartTip.offsetWidth - 6) + "px";
+  windChartTip.style.top = "6px";
+});
+windChart.addEventListener("mouseleave", () => { windChartState.hover = -1; windChartTip.style.display = "none"; drawWindChart(); });
+new ResizeObserver(() => { if (windDock.classList.contains("on")) drawWindChart(); }).observe(windChartWrap);
+
+
+
 /* ── render loop / time ───────────────────────────────────────────── */
 function curT() { return Math.max(0, Math.min(T - 1, Math.round(tPos))); }
 
@@ -1611,7 +2010,6 @@ function syncUI() {
 }
 
 function renderAll(forceOverlay) {
-  
   const doOverlay = forceOverlay || Math.abs(tPos - lastOverlayT) >= 0.25;
   if (doOverlay) lastOverlayT = tPos;
   for (let i = 0; i < layoutCount; i++) panels[i].render(panelModels[i], currentVar, tPos, doOverlay);
@@ -1624,20 +2022,13 @@ function frame(ts) {
     tPos += dt * hoursPerSec; if (tPos > T - 1) tPos = 0;
     syncUI(); renderAll(false);
   }
-  if (true) {
-    for (let i = 0; i < layoutCount; i++) panels[i].stepFlow();
-  }
+  for (let i = 0; i < layoutCount; i++) panels[i].stepFlow();
   if (playing || opts.flow) rafId = requestAnimationFrame(frame);
 }
 function ensureLoop() {
-  if (!rafId && (playing || opts.flow)) {
-    lastFrame = performance.now(); rafId = requestAnimationFrame(frame);
-  }
+  if (!rafId && (playing || opts.flow)) { lastFrame = performance.now(); rafId = requestAnimationFrame(frame); }
 }
 function refresh() { syncUI(); renderAll(true); ensureLoop(); hideProbe(); }
-
-/* ── tabs ─────────────────────────────────────────────────────────── */
-
 
 /* ── UI wiring ────────────────────────────────────────────────────── */
 dates.forEach(d => { const o = document.createElement("option"); o.value = d; o.textContent = d; dateSelect.appendChild(o); });
@@ -1685,28 +2076,25 @@ function applyLayout(n) {
 dateSelect.onchange = e => { const d = e.target.value, ix = dayIdx[d]; hourSlider.max = ix.length - 1; tPos = ix[Math.min(12, ix.length - 1)]; refresh(); };
 varSelect.onchange = e => {
   currentVar = e.target.value;
-  /* default Wind farms on only when Wind Speed is selected; user can still toggle */
-  const farmsEl = $("chkFarms");
-  if (farmsEl) {
-    const want = currentVar === "wind_speed_80m";
-    farmsEl.checked = want;
-    opts.farms = want;
-  }
-  drawLegend();
-  refresh();
+  chkWindFarms.disabled = currentVar !== "wind_speed_80m";
+  drawLegend(); refresh();
 };
 layoutSelect.onchange = e => applyLayout(+e.target.value);
 hourSlider.oninput = e => { tPos = dayIdx[DATE_OF[curT()]][0] + (+e.target.value); refresh(); };
 speedSelect.onchange = e => { hoursPerSec = +e.target.value; };
 outsideSelect.onchange = e => { opts.outside = e.target.value; renderAll(true); };
 opacityRange.oninput = e => { opts.opacity = +e.target.value / 100; renderAll(false); };
-[["chkFlow","flow"],["chkIso","iso"],["chkIsot","isot"],["chkCities","cities"],["chkHL","hl"],["chkFarms","farms"]].forEach(([id, k]) => {
+[["chkFlow","flow"],["chkIso","iso"],["chkIsot","isot"],["chkCities","cities"],["chkHL","hl"],["chkWindFarms","windFarms"]].forEach(([id, k]) => {
   $(id).onchange = e => {
     opts[k] = e.target.checked;
     if (k === "flow" && !opts.flow) panels.forEach(p => { p.flowReady = false; p.clearFlow(); });
     renderAll(true); ensureLoop();
   };
 });
+chkWindMW.onchange = () => {
+  updateWindDock();
+  requestAnimationFrame(() => { resizeAll(); renderAll(true); drawLegend(); drawWindChart(); });
+};
 playBtn.onclick = () => {
   playing = !playing; playBtn.textContent = playing ? "❚❚ Pause" : "▶ Play";
   if (playing) hideProbe(); else { tPos = curT(); refresh(); }
@@ -1766,18 +2154,19 @@ $("lastUpdated").textContent = "Last updated: " + DATA.generated_at + " CT";
 })();
 dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
 varSelect.value = currentVar; layoutSelect.value = "3";
+chkWindFarms.checked = true;
+chkWindFarms.disabled = currentVar !== "wind_speed_80m";
 
+/* make the controls and the state agree from the very first render */
 outsideSelect.value = "dim";
 opacityRange.value = 100;
 opts.outside = outsideSelect.value;
 opts.opacity = +opacityRange.value / 100;
 
-new ResizeObserver(() => {
-  if (resizeAll()) renderAll(true); drawLegend();
-}).observe(mapsEl);
-
+new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
 applyLayout(3); drawLegend();
-requestAnimationFrame(() => { resizeAll(); renderAll(true); });
+updateWindDock();
+requestAnimationFrame(() => { resizeAll(); renderAll(true); drawWindChart(); });  /* redraw once layout has settled */
 window.__viewer = { panels: panels, opts: opts, setT: t => { tPos = t; refresh(); }, setVar: v => { currentVar = v; varSelect.value = v; drawLegend(); refresh(); } };
 })();
 </script>
@@ -1801,9 +2190,6 @@ def main():
     mask = compute_inside_mask(lats, lons, texas_rings, SPACING)
     print(f"  {int(mask.sum())} of {mask.size} grid cells fall inside Texas")
 
-    print("Wind turbine inventory (USWTDB)…")
-    turbines = load_wind_turbines()
-
     if DEMO_MODE:
         print("DEMO MODE: generating synthetic data (no API calls)…")
         arrs, timestamps = make_demo_data(lats, lons, MODELS)
@@ -1822,14 +2208,13 @@ def main():
     print("Exporting grid data…")
     export_grid_data(out_dir, arrs, MODELS, ENC_VARS)
 
+    wind_forecast = build_wind_forecast_payload(arrs, lats, lons, timestamps, MODELS)
+
     var_meta = {}
     for v in LAYERS:
         label, unit, decimals, stops, _q, pw = VAR_META[v]
         var_meta[v] = {"label": label, "unit": unit, "decimals": decimals,
                        "stops": [[s[0], s[1]] for s in stops], "pow": pw}
-
-    # Compact turbine list for map dots: [lat, lon, ...]
-    wind_farms = [[t["lat"], t["lon"]] for t in turbines]
 
     payload = {
         "generated_at": datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d %H:%M"),
@@ -1849,14 +2234,13 @@ def main():
         "valueOnly": [[n, la, lo] for n, la, lo in VALUE_ONLY_CITIES],
         "base": base,
         "hl": {"count": HL_COUNT, "minSep": HL_MIN_SEP_DEG},
-        "windFarms": wind_farms,
+        "windForecast": wind_forecast,
     }
     html = HTML_TEMPLATE.replace("__DATA_JSON__", json.dumps(payload, separators=(",", ":")))
     (out_dir / "index.html").write_text(html, encoding="utf-8")
 
     print(f"\nDone in {time.time() - t0:.0f}s → {out_dir.resolve()}")
     print(f"Open {out_dir / 'index.html'}  (keep grid_data.js next to it)")
-    print(f"Wind farms on map: {len(wind_farms)} USWTDB turbines (shown when Wind Speed selected)")
 
 
 if __name__ == "__main__":
