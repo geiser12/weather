@@ -2071,7 +2071,11 @@ function syncUI() {
   const t = curT();
   hourSlider.max = Math.max(0, T - 1);
   hourSlider.value = t;
-  timeLabel.textContent = "HE " + (HOUR_OF[t] + 1) + " CT";
+  const d = DATE_OF[t];
+  const dt = new Date(d + "T12:00:00").toLocaleDateString(undefined, {
+    weekday: "short", month: "short", day: "numeric"
+  });
+  timeLabel.textContent = dt + "  •  HE " + (HOUR_OF[t] + 1) + " CT";
 }
 
 function renderAll(forceOverlay) {
@@ -2225,11 +2229,17 @@ $("lastUpdated").textContent = "Last updated: " + DATA.generated_at + " CT";
 hourSlider.min = 0;
 hourSlider.max = Math.max(0, T - 1);
 hourSlider.value = curT();
-/* Tick labels: HE only, no dates — evenly spaced across the full forecast */
+/* Tick labels under slider: HE only, aligned to real hours across the full range */
 (function buildHourTicks() {
-  if (!hourTicks) return;
-  const labels = [1, 7, 13, 19, 24];
-  hourTicks.innerHTML = labels.map(he => "<span>HE " + he + "</span>").join("");
+  if (!hourTicks || T < 1) return;
+  const count = Math.min(8, Math.max(2, T));
+  const parts = [];
+  for (let i = 0; i < count; i++) {
+    const k = count === 1 ? 0 : Math.round(i * (T - 1) / (count - 1));
+    const he = (HOUR_OF[k] != null ? HOUR_OF[k] : 0) + 1;
+    parts.push("<span>HE " + he + "</span>");
+  }
+  hourTicks.innerHTML = parts.join("");
 })();
 varSelect.value = currentVar; layoutSelect.value = "3";
 chkWindFarms.checked = true;
