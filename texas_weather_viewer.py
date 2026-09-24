@@ -658,11 +658,13 @@ def build_wind_forecast_payload(arrs, lats, lons, timestamps, models):
         )
         ercot = ercot.dropna(subset=["Target Time", "STWPF"])
 
-        # ERCOT STWPF is already supplied in HE convention:
-        # 01:00 = HE1, 02:00 = HE2, ..., 00:00 = HE24.
-        #
-        # Do NOT shift these timestamps by +/- 1 hour.
-        #
+        # ERCOT STWPF labels: Hour Ending N is stored as clock time N:00
+        # (HE1→01:00, HE21→21:00, HE24→00:00 next day).
+        # Open-Meteo / map HE convention uses the *start* of the hour
+        # (HE21 → 20:00). Shift ERCOT back 1 hour so series align on the
+        # same HE label on the chart.
+        ercot["Target Time"] = ercot["Target Time"] - pd.Timedelta(hours=1)
+
         # Clip ERCOT to the exact Open-Meteo forecast window.
         before_clip = len(ercot)
 
@@ -994,9 +996,24 @@ header {
 #windDock { display: none; flex: 0 0 35%; min-height: 170px; background: var(--panel);
   border-top: 1px solid var(--border); position: relative; flex-direction: column; padding: 7px 18px 4px; }
 #windDock.on { display: flex; }
-.wind-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 20px; }
+#windDock.expanded {
+  position: fixed; inset: 0; z-index: 80; flex: none !important;
+  min-height: 0; padding: 14px 20px 12px;
+  border: 0; background: var(--bg);
+  box-shadow: 0 0 0 1px var(--border);
+}
+#windDock.expanded #windChartWrap { min-height: 0; flex: 1; }
+#windDock.expanded .wind-note { white-space: normal; overflow: visible; text-overflow: unset; max-width: 70%; }
+.wind-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; }
 .wind-head h2 { font-size: 13px; margin: 0; font-weight: 650; }
 .wind-head .meta { font-size: 10.5px; color: var(--muted); }
+.wind-head-right { display: flex; align-items: center; gap: 10px; }
+#windExpandBtn {
+  background: #1a2430; color: var(--text); border: 1px solid #334253;
+  border-radius: 5px; padding: 4px 10px; font-size: 11px; font-weight: 600;
+  cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+#windExpandBtn:hover { border-color: var(--accent); color: var(--accent); }
 .wind-note { font-size: 10px; color: var(--muted); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #windChartWrap { position: relative; flex: 1; min-height: 120px; }
 #windChart { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -1260,7 +1277,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
 <div id="windDock">
   <div class="wind-head">
     <h2>Wind MW Forecast</h2>
-    <span class="meta" id="windMeta"></span>
+    <div class="wind-head-right">
+      <span class="meta" id="windMeta"></span>
+      <button type="button" id="windExpandBtn" title="Expand chart (Esc to exit)">Expand</button>
+    </div>
   </div>
   <div class="wind-note" id="windNote"></div>
   <div id="windChartWrap">
@@ -1326,7 +1346,7 @@ const probeEl = $("probe"), mapsEl = $("maps"), legendCv = $("legend"), legendLa
 const speedSelect = $("speedSelect"), outsideSelect = $("outsideSelect"), opacityRange = $("opacityRange");
 const chkWindFarms = $("chkWindFarms"), chkWindMW = $("chkWindMW"), windDock = $("windDock"), windChart = $("windChart");
 const windChartWrap = $("windChartWrap"), windChartTip = $("windChartTip"), windLegend = $("windLegend");
-const windMeta = $("windMeta"), windNote = $("windNote");
+const windMeta = $("windMeta"), windNote = $("windNote"), windExpandBtn = $("windExpandBtn");
 const modelSelects = [0,1,2,3].map(i => $("modelSelect" + i));
 const modelWraps = [0,1,2,3].map(i => $("modelWrap" + i));
 
@@ -1996,6 +2016,25 @@ windChart.addEventListener("mousemove", e => {
 windChart.addEventListener("mouseleave", () => { windChartState.hover = -1; windChartTip.style.display = "none"; drawWindChart(); });
 new ResizeObserver(() => { if (windDock.classList.contains("on")) drawWindChart(); }).observe(windChartWrap);
 
+function setWindExpanded(on) {
+  windDock.classList.toggle("expanded", !!on);
+  windExpandBtn.textContent = on ? "Collapse" : "Expand";
+  windExpandBtn.title = on ? "Exit full screen (Esc)" : "Expand chart (Esc to exit)";
+  requestAnimationFrame(() => { drawWindChart(); });
+}
+windExpandBtn.addEventListener("click", () => {
+  if (!windDock.classList.contains("on")) return;
+  setWindExpanded(!windDock.classList.contains("expanded"));
+});
+/* Collapse fullscreen when the dock is hidden */
+const _updateWindDockOrig = updateWindDock;
+updateWindDock = function () {
+  _updateWindDockOrig();
+  if (!windDock.classList.contains("on") && windDock.classList.contains("expanded")) {
+    setWindExpanded(false);
+  }
+};
+
 
 
 /* ── render loop / time ───────────────────────────────────────────── */
@@ -2102,7 +2141,10 @@ playBtn.onclick = () => {
 };
 document.addEventListener("keydown", e => {
   if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.key !== "Escape") return;
-  if (e.key === "Escape") hideProbe();
+  if (e.key === "Escape") {
+    if (windDock.classList.contains("expanded")) { setWindExpanded(false); return; }
+    hideProbe();
+  }
   else if (e.key === " ") { e.preventDefault(); playBtn.click(); }
   else if (e.key === "ArrowRight") { tPos = Math.min(T - 1, curT() + 1); refresh(); }
   else if (e.key === "ArrowLeft") { tPos = Math.max(0, curT() - 1); refresh(); }
