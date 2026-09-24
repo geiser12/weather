@@ -1897,7 +1897,8 @@ function drawWindChart() {
   const allVals = [];
   for (const n of names) for (const v of (wf.series[n] || [])) if (v != null && Number.isFinite(v)) allVals.push(v);
   const cap = Number(wf.fleetCapacityMw) || 0;
-  const ymax = Math.max(100, cap, allVals.length ? Math.max(...allVals) : 100) * 1.05;
+  const dataMax = allVals.length ? Math.max(...allVals) : 0;
+  const ymax = Math.max(dataMax + 2000, 100);
   const y = v => top + h - (v / ymax) * h;
 
   ctx.font = "9px " + FONT; ctx.textAlign = "right"; ctx.textBaseline = "middle";
