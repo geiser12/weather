@@ -1220,7 +1220,6 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
 
 <div id="mapsView">
 <div class="controls">
-  <div><label class="lbl" for="dateSelect">Date</label><select id="dateSelect"></select></div>
   <div><label class="lbl" for="varSelect">Variable</label><select id="varSelect"></select></div>
   <div>
     <label class="lbl" for="layoutSelect">Layout</label>
@@ -1295,8 +1294,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
 <div class="timeline">
   <span id="timeLabel"></span>
   <div>
-    <input type="range" id="hourSlider" min="0" max="23" value="12" step="1" aria-label="Hour">
-    <div class="hour-ticks">
+    <input type="range" id="hourSlider" min="0" max="1" value="0" step="1" aria-label="Hour">
+    <div class="hour-ticks" id="hourTicks">
       <span>HE 1</span><span>HE 7</span><span>HE 13</span><span>HE 19</span><span>HE 24</span>
     </div>
   </div>
@@ -1340,8 +1339,9 @@ let U16;
 })();
 
 const $ = id => document.getElementById(id);
-const dateSelect = $("dateSelect"), varSelect = $("varSelect"), layoutSelect = $("layoutSelect");
+const varSelect = $("varSelect"), layoutSelect = $("layoutSelect");
 const hourSlider = $("hourSlider"), timeLabel = $("timeLabel"), playBtn = $("playBtn");
+const hourTicks = $("hourTicks");
 const probeEl = $("probe"), mapsEl = $("maps"), legendCv = $("legend"), legendLabel = $("legendLabel");
 const speedSelect = $("speedSelect"), outsideSelect = $("outsideSelect"), opacityRange = $("opacityRange");
 const chkWindFarms = $("chkWindFarms"), chkWindMW = $("chkWindMW"), windDock = $("windDock"), windChart = $("windChart");
@@ -2065,11 +2065,10 @@ updateWindDock = function () {
 function curT() { return Math.max(0, Math.min(T - 1, Math.round(tPos))); }
 
 function syncUI() {
-  const t = curT(), d = DATE_OF[t];
-  if (dateSelect.value !== d) { dateSelect.value = d; hourSlider.max = dayIdx[d].length - 1; }
-  hourSlider.value = t - dayIdx[d][0];
-  const dt = new Date(d + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-  timeLabel.textContent = dt + "  •  HE " + (HOUR_OF[t] + 1) + " CT";
+  const t = curT();
+  hourSlider.max = Math.max(0, T - 1);
+  hourSlider.value = t;
+  timeLabel.textContent = "HE " + (HOUR_OF[t] + 1) + " CT";
 }
 
 function renderAll(forceOverlay) {
@@ -2098,7 +2097,6 @@ function refresh() {
 }
 
 /* ── UI wiring ────────────────────────────────────────────────────── */
-dates.forEach(d => { const o = document.createElement("option"); o.value = d; o.textContent = d; dateSelect.appendChild(o); });
 VARS.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = META[v].label; varSelect.appendChild(o); });
 modelSelects.forEach((sel, idx) => {
   MODELS.forEach(m => { const o = document.createElement("option"); o.value = m; o.textContent = MODEL_LABEL(m); sel.appendChild(o); });
@@ -2140,14 +2138,13 @@ function applyLayout(n) {
   resizeAll(); refresh();
 }
 
-dateSelect.onchange = e => { const d = e.target.value, ix = dayIdx[d]; hourSlider.max = ix.length - 1; tPos = ix[Math.min(12, ix.length - 1)]; refresh(); };
 varSelect.onchange = e => {
   currentVar = e.target.value;
   chkWindFarms.disabled = currentVar !== "wind_speed_80m";
   drawLegend(); refresh();
 };
 layoutSelect.onchange = e => applyLayout(+e.target.value);
-hourSlider.oninput = e => { tPos = dayIdx[DATE_OF[curT()]][0] + (+e.target.value); refresh(); };
+hourSlider.oninput = e => { tPos = +e.target.value; refresh(); };
 speedSelect.onchange = e => { hoursPerSec = +e.target.value; };
 outsideSelect.onchange = e => { opts.outside = e.target.value; renderAll(true); };
 opacityRange.oninput = e => { opts.opacity = +e.target.value / 100; renderAll(false); };
@@ -2222,7 +2219,15 @@ $("lastUpdated").textContent = "Last updated: " + DATA.generated_at + " CT";
   if (t < 0) { const d0 = dayIdx[dates[0]]; t = d0[Math.min(12, d0.length - 1)]; }
   tPos = t;
 })();
-dateSelect.value = DATE_OF[curT()]; hourSlider.max = dayIdx[DATE_OF[curT()]].length - 1;
+hourSlider.min = 0;
+hourSlider.max = Math.max(0, T - 1);
+hourSlider.value = curT();
+/* Tick labels: HE only, no dates — evenly spaced across the full forecast */
+(function buildHourTicks() {
+  if (!hourTicks) return;
+  const labels = [1, 7, 13, 19, 24];
+  hourTicks.innerHTML = labels.map(he => "<span>HE " + he + "</span>").join("");
+})();
 varSelect.value = currentVar; layoutSelect.value = "3";
 chkWindFarms.checked = true;
 chkWindFarms.disabled = currentVar !== "wind_speed_80m";
