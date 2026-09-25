@@ -72,15 +72,15 @@ ERCOT_MIN_LON = -105.0             # drop far-west / El Paso (WECC)
 # Counties typically outside ERCOT (SPP / WECC). Applied when county is present.
 ERCOT_EXCLUDE_COUNTIES = {
     # Northern panhandle / SPP
-    "dallam", "sherman", "hansford", "ochiltree", "lipscomb",
-    "hartley", "moore", "hutchinson", "roberts", "hemphill",
-    "oldham", "potter", "carson", "gray", "wheeler",
-    "deaf smith", "randall", "armstrong", "donley", "collingsworth",
-    "parmer", "castro", "swisher", "briscoe", "hall", "childress",
-    # Far northeast SPP
-    "bowie", "cass", "marion", "morris", "titus", "camp",
-    "upshur", "gregg", "harrison", "panola", "shelby",
-    "san augustine", "sabine",
+    # "dallam", "sherman", "hansford", "ochiltree", "lipscomb",
+    # "hartley", "moore", "hutchinson", "roberts", "hemphill",
+    # "oldham", "potter", "carson", "gray", "wheeler",
+    # "deaf smith", "randall", "armstrong", "donley", "collingsworth",
+    # "parmer", "castro", "swisher", "briscoe", "hall", "childress",
+    # # Far northeast SPP
+    # "bowie", "cass", "marion", "morris", "titus", "camp",
+    # "upshur", "gregg", "harrison", "panola", "shelby",
+    # "san augustine", "sabine",
     # Far west WECC
     "el paso", "hudspeth",
 }
