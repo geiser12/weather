@@ -1165,7 +1165,7 @@ select:focus-visible, button:focus-visible, input:focus-visible { outline: 2px s
 #maps.layout-1 { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr); }
 #maps.layout-2 { grid-template-columns: repeat(2, minmax(0,1fr)); grid-template-rows: minmax(0,1fr); }
 #maps.layout-3 { grid-template-columns: repeat(3, minmax(0,1fr)); grid-template-rows: minmax(0,1fr); }
-#maps.layout-4 { grid-template-columns: repeat(2, minmax(0,1fr)); grid-template-rows: repeat(2, minmax(0,1fr)); }
+#maps.layout-4 {grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr);}
 .panel {
   position: relative; background: #0d131a; overflow: hidden; min-width: 0; min-height: 0;
   display: flex; align-items: center; justify-content: center;
