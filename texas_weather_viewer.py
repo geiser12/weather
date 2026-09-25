@@ -27,7 +27,7 @@ import requests
 
 from scripts.uswtdb_fleet import fetch_tx_wind_fleet, demo_fleet
 from scripts.wind_power_model import fleet_mw_timeseries, fleet_total_capacity_mw
-
+from scripts.uspvdb_fleet import fetch_tx_solar_fleet, demo_solar_fleet
 # ============================================================================
 # SETTINGS – edit these
 # ============================================================================
@@ -714,12 +714,14 @@ def build_wind_forecast_payload(arrs, lats, lons, timestamps, models):
         fleet = demo_fleet() if DEMO_MODE else fetch_tx_wind_fleet(
             force=WIND_FLEET_FORCE_REFRESH
         )
+        solar_fleet = demo_solar_fleet() if DEMO_MODE else fetch_tx_solar_fleet()
     except Exception as e:
-        print(f"  [warn] could not load wind fleet ({e}); wind chart will be empty")
+        print(f"  [warn] could not load renewable fleet ({e}); wind chart will be empty")
         return None
 
     # Restrict to approximate ERCOT footprint (not all of Texas).
     fleet = filter_fleet_ercot(fleet)
+    solar_fleet = filter_fleet_ercot(solar_fleet)
 
     try:
         total_cap = fleet_total_capacity_mw(fleet)
@@ -1103,7 +1105,7 @@ header {
 }
 .tabbar button:hover { color: var(--text); }
 .tabbar button.active { background: #1a2430; border-color: #334253; color: var(--text); }
-
+ 
 #mapsView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #windDock { display: none; flex: 0 0 35%; min-height: 170px; background: var(--panel);
   border-top: 1px solid var(--border); position: relative; flex-direction: column; padding: 7px 18px 4px; }
@@ -1158,7 +1160,7 @@ select:focus-visible, button:focus-visible, input:focus-visible { outline: 2px s
 .toggles input { accent-color: var(--accent); margin: 0; }
 #opacityRange { width: 90px; accent-color: var(--accent); }
 #probeHint { font-size: 11px; color: var(--muted); align-self: center; }
-
+ 
 #maps {
   flex: 1; min-height: 0; display: grid; gap: 3px; background: #1c252f; padding: 3px;
 }
@@ -1173,7 +1175,7 @@ select:focus-visible, button:focus-visible, input:focus-visible { outline: 2px s
 .panel.hidden { display: none; }
 .mapbox { position: relative; flex: none; cursor: crosshair; }
 .mapbox canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
-
+ 
 .legend {
   flex: none; height: 44px; padding: 4px 18px 0; background: var(--panel);
   border-top: 1px solid var(--border); display: flex; align-items: center; gap: 14px;
@@ -1197,12 +1199,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   border-radius: 8px; padding: 10px 12px; pointer-events: none;
   box-shadow: 0 8px 28px rgba(0,0,0,0.45); font-size: 12px;
 }
-
+ 
 #windDock.on + .legend { }
 @media (max-height: 720px) and (min-width: 769px) {
   #windDock { flex-basis: 22%; min-height: 145px; }
 }
-
+ 
 /* ── Mobile / narrow screens ─────────────────────────────────────── */
 @media (max-width: 768px) {
   html, body {
@@ -1213,7 +1215,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   body {
     display: block;                 /* drop the flex column that was locking heights */
   }
-
+ 
   header {
     height: auto;
     padding: 10px 12px;
@@ -1222,7 +1224,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   }
   .title { font-size: 15px; }
   .subtitle { font-size: 10px; }
-
+ 
   .controls {
     padding: 8px 12px;
     gap: 8px 10px;
@@ -1246,7 +1248,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
     row-gap: 6px;
   }
   #opacityRange { width: 70px; }
-
+ 
   /* Maps area – give it a sensible minimum height so it doesn't collapse */
   #maps {
     min-height: 52vh;
@@ -1260,7 +1262,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
     grid-template-rows: repeat(auto-fit, minmax(180px, 1fr));
   }
   /* When user picks 1-panel it already looks good */
-
+ 
   .legend {
     height: auto;
     padding: 6px 12px;
@@ -1269,7 +1271,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   }
   #legendLabel { min-width: 0; font-size: 11px; }
   #legend { max-width: none; width: 100%; height: 32px; }
-
+ 
   .timeline {
     height: auto;
     padding: 10px 12px 14px;
@@ -1282,17 +1284,17 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   }
   #timeLabel { font-size: 12px; }
   .hour-ticks { font-size: 8px; padding: 0 6px; }
-
+ 
   /* Probe needs a bit more room on small screens */
   #probe {
     max-width: min(290px, 92vw);
     font-size: 11px;
   }
-
+ 
   /* Hide the least-critical desktop-only hint */
   #probeHint { display: none; }
 }
-
+ 
 /* Extra-small phones */
 @media (max-width: 420px) {
   .controls {
@@ -1329,7 +1331,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   </div>
   <div id="lastUpdated" style="font-size:11px; color:var(--muted);"></div>
 </header>
-
+ 
 <div id="mapsView">
 <div class="controls">
   <div><label class="lbl" for="varSelect">Variable</label><select id="varSelect"></select></div>
@@ -1363,6 +1365,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
     <label><input type="checkbox" id="chkCities" checked> Values</label>
     <label><input type="checkbox" id="chkHL" checked> H/L</label>
     <label><input type="checkbox" id="chkWindFarms" checked> Wind Farms</label>
+    <label><input type="checkbox" id="chkSolarFarms"> Solar Farms</label>
     <label><input type="checkbox" id="chkWindMW"> Show Wind Forecast MW</label>
   </div>
   <div><label class="lbl" for="opacityRange">Layer opacity</label><input type="range" id="opacityRange" min="20" max="100" value="100"></div>
@@ -1377,14 +1380,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   <div><label class="lbl">&nbsp;</label><button id="playBtn">▶ Play</button></div>
   <span id="probeHint">Click a map to probe values</span>
 </div>
-
+ 
 <div id="maps" class="layout-4">
   <div class="panel" id="panel0"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
   <div class="panel" id="panel1"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
   <div class="panel" id="panel2"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
   <div class="panel" id="panel3"><div class="mapbox"><canvas class="c-base"></canvas><canvas class="c-gl"></canvas><canvas class="c-flow"></canvas><canvas class="c-over"></canvas></div></div>
 </div>
-
+ 
 <div id="windDock">
   <div class="wind-head">
     <h2>Wind MW Forecast</h2>
@@ -1400,9 +1403,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   </div>
   <div class="wind-legend" id="windLegend"></div>
 </div>
-
+ 
 <div class="legend"><span id="legendLabel"></span><canvas id="legend"></canvas></div>
-
+ 
 <div class="timeline">
   <span id="timeLabel"></span>
   <div>
@@ -1413,16 +1416,16 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; display
   </div>
 </div>
 </div>
-
+ 
 <div id="probe"></div>
 <div id="fatal"></div>
-
+ 
 <script src="grid_data.js"></script>
 <script>
 (function () {
 "use strict";
 const DATA = __DATA_JSON__;
-
+ 
 /* ── constants & data ─────────────────────────────────────────────── */
 const B = DATA.bounds;
 const DLON = B.max_lon - B.min_lon, DLAT = B.max_lat - B.min_lat;
@@ -1434,13 +1437,13 @@ const META = DATA.varMeta, QUANT = DATA.quant, BASE = DATA.base;
 const MASK = Uint8Array.from(DATA.mask);
 const DVIDX = {}; DVARS.forEach((v, i) => DVIDX[v] = i);
 const FONT = '"Segoe UI", system-ui, Arial, sans-serif';
-
+ 
 function fatal(msg) {
   const el = document.getElementById("fatal");
   el.innerHTML = "<div>" + msg + "</div>"; el.style.display = "flex";
 }
 if (!window.GRID_B64) { fatal("Could not load <b>grid_data.js</b>. Keep it in the same folder as index.html."); return; }
-
+ 
 let U16;
 (function decode() {
   const s = atob(window.GRID_B64);
@@ -1449,19 +1452,19 @@ let U16;
   U16 = new Uint16Array(u8.buffer);
   window.GRID_B64 = null;
 })();
-
+ 
 const $ = id => document.getElementById(id);
 const varSelect = $("varSelect"), layoutSelect = $("layoutSelect");
 const hourSlider = $("hourSlider"), timeLabel = $("timeLabel"), playBtn = $("playBtn");
 const hourTicks = $("hourTicks");
 const probeEl = $("probe"), mapsEl = $("maps"), legendCv = $("legend"), legendLabel = $("legendLabel");
 const speedSelect = $("speedSelect"), outsideSelect = $("outsideSelect"), opacityRange = $("opacityRange");
-const chkWindFarms = $("chkWindFarms"), chkWindMW = $("chkWindMW"), windDock = $("windDock"), windChart = $("windChart");
+const chkWindFarms = $("chkWindFarms"), chkSolarFarms = $("chkSolarFarms"), chkWindMW = $("chkWindMW"), windDock = $("windDock"), windChart = $("windChart");
 const windChartWrap = $("windChartWrap"), windChartTip = $("windChartTip"), windLegend = $("windLegend");
 const windMeta = $("windMeta"), windNote = $("windNote"), windExpandBtn = $("windExpandBtn");
 const modelSelects = [0,1,2,3].map(i => $("modelSelect" + i));
 const modelWraps = [0,1,2,3].map(i => $("modelWrap" + i));
-
+ 
 /* timeline */
 const dates = [], dayIdx = {}, DATE_OF = [], HOUR_OF = [];
 DATA.times.forEach((s, t) => {
@@ -1469,16 +1472,16 @@ DATA.times.forEach((s, t) => {
   if (!(d in dayIdx)) { dayIdx[d] = []; dates.push(d); }
   dayIdx[d].push(t); DATE_OF.push(d); HOUR_OF.push(+s.slice(11, 13));
 });
-
+ 
 /* state */
 let currentVar = "wind_speed_80m", tPos = 0, layoutCount = 4;
 let panelModels = MODELS.slice();
 let playing = false, rafId = null, lastFrame = 0, lastOverlayT = -99, hoursPerSec = 1.4;
-const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, windFarms: true, outside: "dim", opacity: 1 };
-
+const opts = { flow: true, iso: false, isot: false, cities: true, hl: true, windFarms: true, solarFarms: false, outside: "dim", opacity: 1 };
+ 
 /* ── data access ──────────────────────────────────────────────────── */
 function isMissing(model, v) { return (DATA.missing[model] || []).indexOf(v) >= 0; }
-
+ 
 function getField(model, v, t, out) {
   const block = (MODELS.indexOf(model) * DVARS.length + DVIDX[v]) * T * NCELL;
   const t0 = Math.max(0, Math.min(T - 1, Math.floor(t)));
@@ -1493,7 +1496,7 @@ function getField(model, v, t, out) {
   }
   return f;
 }
-
+ 
 function sample(f, lon, lat) {
   const gx = (lon - B.min_lon) / DLON * (NLON - 1), gy = (lat - B.min_lat) / DLAT * (NLAT - 1);
   let i0 = Math.max(0, Math.min(NLON - 2, Math.floor(gx))), j0 = Math.max(0, Math.min(NLAT - 2, Math.floor(gy)));
@@ -1501,7 +1504,7 @@ function sample(f, lon, lat) {
   const a = j0 * NLON + i0;
   return (f[a] * (1 - fx) + f[a + 1] * fx) * (1 - fy) + (f[a + NLON] * (1 - fx) + f[a + NLON + 1] * fx) * fy;
 }
-
+ 
 function sampleQ(model, v, t, lon, lat) {
   if (isMissing(model, v)) return null;
   const base = (MODELS.indexOf(model) * DVARS.length + DVIDX[v]) * T * NCELL + t * NCELL;
@@ -1512,7 +1515,7 @@ function sampleQ(model, v, t, lon, lat) {
   const q = (U16[a] * (1 - fx) + U16[a + 1] * fx) * (1 - fy) + (U16[a + NLON] * (1 - fx) + U16[a + NLON + 1] * fx) * fy;
   return QUANT[v][0] + q * (QUANT[v][1] - QUANT[v][0]) / 65535;
 }
-
+ 
 function fmtV(v, d) {
   let s = v.toFixed(d);
   if (/^-0(\.0+)?$/.test(s)) s = s.slice(1);
@@ -1522,7 +1525,7 @@ function fmtStop(v) { return (Math.abs(v) >= 10 || Number.isInteger(v)) ? String
 function compass(deg) {
   return ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"][Math.round(deg / 22.5) % 16];
 }
-
+ 
 /* ── colour LUTs ──────────────────────────────────────────────────── */
 const LUT_N = 2048;
 const lutCache = {};
@@ -1551,7 +1554,7 @@ function buildLut(v) {
   }
   return lutCache[v] = { u8: u8, vmin: vmin, vmax: vmax, pow: pw };
 }
-
+ 
 /* ── geometry helpers ─────────────────────────────────────────────── */
 function tracePath(ctx, rings, X, Y) {
   for (const r of rings) {
@@ -1565,7 +1568,7 @@ function haloText(ctx, txt, x, y, font, fill, halo) {
   ctx.strokeStyle = halo || "rgba(255,255,255,0.88)"; ctx.strokeText(txt, x, y);
   ctx.fillStyle = fill; ctx.fillText(txt, x, y);
 }
-
+ 
 /* Catmull-Rom upsample, clamped to the local range (no ringing) */
 function upsampleCR(f, K) {
   const NX = (NLON - 1) * K + 1, NY = (NLAT - 1) * K + 1, out = new Float32Array(NX * NY);
@@ -1588,7 +1591,7 @@ function upsampleCR(f, K) {
   }
   return { g: out, NX: NX, NY: NY };
 }
-
+ 
 /* marching squares -> flat [x1,y1,x2,y2,...] in panel pixels */
 function contourSegs(g, NX, NY, lv, W, H) {
   const out = [], sx = W / (NX - 1), sy = H / (NY - 1);
@@ -1614,7 +1617,7 @@ function contourSegs(g, NX, NY, lv, W, H) {
   }
   return out;
 }
-
+ 
 function drawIsolines(ctx, f, step, labelEvery, W, H, placed) {
   let mn = Infinity, mx = -Infinity;
   for (let i = 0; i < NCELL; i++) { if (f[i] < mn) mn = f[i]; if (f[i] > mx) mx = f[i]; }
@@ -1649,7 +1652,7 @@ function drawIsolines(ctx, f, step, labelEvery, W, H, placed) {
     }
   }
 }
-
+ 
 function selectExtrema(f, mode) {
   const cand = [];
   for (let i = 0; i < NCELL; i++) if (MASK[i] && isFinite(f[i])) cand.push(i);
@@ -1663,7 +1666,7 @@ function selectExtrema(f, mode) {
   }
   return sel;
 }
-
+ 
 /* ── WebGL shader ─────────────────────────────────────────────────── */
 const VS = `#version 300 es
 out vec2 vUv;
@@ -1707,13 +1710,13 @@ void main() {
   col.rgb += (n - 0.5) / 255.0 * col.a;
   outColor = col * uOpacity;
 }`;
-
+ 
 function compile(gl, type, src) {
   const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
   return s;
 }
-
+ 
 /* ── Panel ────────────────────────────────────────────────────────── */
 class Panel {
   constructor(idx, el) {
@@ -1772,7 +1775,7 @@ class Panel {
   }
   X(lon) { return (lon - B.min_lon) / DLON * this.W; }
   Y(lat) { return (B.max_lat - lat) / DLAT * this.H; }
-
+ 
   drawBase() {
     const ctx = this.ctxB, W = this.W, H = this.H, X = lon => this.X(lon), Y = lat => this.Y(lat);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -1788,7 +1791,7 @@ class Panel {
       ctx.lineWidth = 0.8; ctx.strokeStyle = "rgba(90,98,108,0.6)"; ctx.stroke();
     }
   }
-
+ 
   clearGL() {
     const gl = this.gl; if (!gl) return;
     gl.viewport(0, 0, this.cGL.width, this.cGL.height);
@@ -1812,7 +1815,7 @@ class Panel {
     gl.uniform1f(this.u.uPow, lut.pow); gl.uniform1f(this.u.uOpacity, opacity);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
-
+ 
   /* ---- wind particles ---- */
   initParticles() {
     const n = Math.min(2600, Math.round(this.W * this.H / 650));
@@ -1851,27 +1854,27 @@ class Panel {
     }
     ctx.stroke();
   }
-
+ 
   /* ---- overlay ---- */
   drawOverlay(v, t) {
     const ctx = this.ctxO, W = this.W, H = this.H; if (!W) return;
     const X = lon => this.X(lon), Y = lat => this.Y(lat), meta = META[v], model = this.model;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-
+ 
     if (opts.outside !== "show") {
       ctx.beginPath(); ctx.rect(0, 0, W, H); tracePath(ctx, BASE.texas, X, Y);
       ctx.fillStyle = opts.outside === "dim" ? "rgba(12,18,26,0.42)" : "rgba(12,18,26,0.92)";
       ctx.fill("evenodd");
     }
-
+ 
     const placed = [];
     if (opts.iso && !isMissing(model, "pressure_msl")) drawIsolines(ctx, getField(model, "pressure_msl", t), 2, 4, W, H, placed);
     if (opts.isot && !isMissing(model, "temperature_2m")) drawIsolines(ctx, getField(model, "temperature_2m", t), 5, 10, W, H, placed);
-
+ 
     ctx.beginPath(); tracePath(ctx, BASE.texas, X, Y);
     ctx.lineJoin = "round"; ctx.lineWidth = 1.1; ctx.strokeStyle = "rgba(24,32,44,0.9)"; ctx.stroke();
-
+ 
     /* Wind-farm locations: intentionally shown only on the wind-speed map.
        The source is the same USWTDB fleet used for the MW conversion.
        Farms live under DATA.windForecast.windFarms (not top-level DATA.windFarms). */
@@ -1879,8 +1882,8 @@ class Panel {
     if (opts.windFarms && v === "wind_speed_80m" && farms.length) {
       ctx.save();
       ctx.fillStyle = "rgba(100,105,110,0.95)";   /* light grey */
-      ctx.strokeStyle = "rgba(50,55,62,0.55)";
-      ctx.lineWidth = 0.65;
+      ctx.strokeStyle = "rgba(40,120,220,0.95)";  /* thin blue outline */
+      ctx.lineWidth = 0.45;
       for (const f of farms) {
         const x = X(f.lon), y = Y(f.lat);
         if (x < -3 || x > W + 3 || y < -3 || y > H + 3) continue;
@@ -1889,6 +1892,21 @@ class Panel {
       ctx.restore();
     }
 
+    /* Solar-farm locations (USPVDB). Toggle works on any layer; auto-on when Solar Radiation selected. */
+    const solarFarms = DATA.solarFarms || [];
+    if (opts.solarFarms && solarFarms.length) {
+      ctx.save();
+      ctx.fillStyle = "rgba(45,45,50,0.95)";       /* dark gray */
+      ctx.strokeStyle = "rgba(210,35,35,0.95)";     /* red outline */
+      ctx.lineWidth = 0.85;
+      for (const f of solarFarms) {
+        const x = X(f.lon), y = Y(f.lat);
+        if (x < -3 || x > W + 3 || y < -3 || y > H + 3) continue;
+        ctx.beginPath(); ctx.arc(x, y, 2.15, 0, 6.2832); ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
+    }
+ 
     if (this.missing) {
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       haloText(ctx, MODEL_LABEL(model) + " does not provide", W / 2, H / 2 - 9, "600 13px " + FONT, "#111");
@@ -1934,7 +1952,7 @@ class Panel {
     ctx.arcTo(8, 30, 8, 8, 5); ctx.arcTo(8, 8, 8 + tw + 16, 8, 5); ctx.closePath(); ctx.fill();
     ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = "#111"; ctx.fillText(label, 16, 19.5);
   }
-
+ 
   render(model, v, t, overlay) {
     this.model = model;
     this.missing = isMissing(model, v);
@@ -1946,10 +1964,10 @@ class Panel {
   }
 }
 function MODEL_LABEL(m) { return (DATA.modelLabels && DATA.modelLabels[m]) || m; }
-
+ 
 const panels = [0,1,2,3].map(i => new Panel(i, $("panel" + i)));
 if (!panels[0].gl) { fatal("This viewer needs WebGL2, which your browser or GPU settings have disabled."); return; }
-
+ 
 /* ── legend ───────────────────────────────────────────────────────── */
 function drawLegend() {
   const meta = META[currentVar], stops = meta.stops, n = stops.length;
@@ -1973,21 +1991,21 @@ function drawLegend() {
     ctx.fillText(fmtStop(s[0]), x, y0 + bh + 4);
   });
 }
-
-
+ 
+ 
 /* ── wind MW chart ───────────────────────────────────────────────── */
 const WIND_COLORS = ["#5ba7ff", "#f2a93b", "#7bd389", "#c084fc", "#f26b6b"];
 const windChartState = { visible: {}, hover: -1, dpr: 1 };
-
+ 
 function windSeriesNames() {
   return DATA.windForecast && DATA.windForecast.series
     ? Object.keys(DATA.windForecast.series) : [];
 }
-
+ 
 function windChartX(t, n, left, width) {
   return n <= 1 ? left : left + t / (n - 1) * width;
 }
-
+ 
 function drawWindChart() {
   const wf = DATA.windForecast;
   if (!wf || !wf.times || !wf.times.length || !wf.series) {
@@ -2002,7 +2020,7 @@ function drawWindChart() {
   const ctx = windChart.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cw, ch);
-
+ 
   const left = 42, right = 10, top = 8, bottom = 22;
   const w = Math.max(20, cw - left - right), h = Math.max(20, ch - top - bottom);
   const names = windSeriesNames().filter(n => windChartState.visible[n] !== false);
@@ -2014,7 +2032,7 @@ function drawWindChart() {
   const dataMax = allVals.length ? Math.max(...allVals) : 0;
   const ymax = Math.max(dataMax + 2000, 100);
   const y = v => top + h - (v / ymax) * h;
-
+ 
   ctx.font = "9px " + FONT; ctx.textAlign = "right"; ctx.textBaseline = "middle";
   ctx.strokeStyle = "rgba(147,160,174,.16)"; ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
@@ -2023,13 +2041,13 @@ function drawWindChart() {
     const val = ymax * (1 - i / 4);
     ctx.fillStyle = "#93a0ae"; ctx.fillText(Math.round(val).toLocaleString(), left - 5, yy);
   }
-
+ 
   if (cap > 0) {
     ctx.setLineDash([4, 4]); ctx.strokeStyle = "rgba(220,225,230,.32)";
     ctx.beginPath(); ctx.moveTo(left, y(cap)); ctx.lineTo(left + w, y(cap)); ctx.stroke();
     ctx.setLineDash([]);
   }
-
+ 
   const times = wf.times, n = times.length;
   ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = "#93a0ae";
   const tickCount = Math.min(8, Math.max(2, Math.floor(w / 90)));
@@ -2043,7 +2061,7 @@ function drawWindChart() {
     const dayLabel = d.toLocaleDateString(undefined, {month: "short", day: "numeric"});
     ctx.fillText(dayLabel + " HE " + he, xx, top + h + 5);
   }
-
+ 
   windSeriesNames().forEach((name, si) => {
     if (windChartState.visible[name] === false) return;
     const vals = wf.series[name] || [];
@@ -2060,7 +2078,7 @@ function drawWindChart() {
     }
     ctx.stroke();
   });
-
+ 
   /* Vertical marker: maps' currently selected hour */
   (function drawMapHourMarker() {
     const mapT = (typeof curT === "function") ? curT() : Math.round(tPos);
@@ -2084,7 +2102,7 @@ function drawWindChart() {
     ctx.setLineDash([]);
     ctx.restore();
   })();
-
+ 
   if (windChartState.hover >= 0 && windChartState.hover < n) {
     const i = windChartState.hover, xx = windChartX(i, n, left, w);
     ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = 1;
@@ -2098,7 +2116,7 @@ function drawWindChart() {
     });
   }
 }
-
+ 
 function updateWindLegend() {
   windLegend.innerHTML = "";
   if (!DATA.windForecast) return;
@@ -2113,7 +2131,7 @@ function updateWindLegend() {
     windLegend.appendChild(b);
   });
 }
-
+ 
 function updateWindDock() {
   const on = !!chkWindMW.checked;
   windDock.classList.toggle("on", on);
@@ -2129,7 +2147,7 @@ function updateWindDock() {
   updateWindLegend();
   requestAnimationFrame(drawWindChart);
 }
-
+ 
 windChart.addEventListener("mousemove", e => {
   const wf = DATA.windForecast; if (!wf || !wf.times.length || !windDock.classList.contains("on")) return;
   const r = windChart.getBoundingClientRect(), x = e.clientX - r.left;
@@ -2154,7 +2172,7 @@ windChart.addEventListener("mousemove", e => {
 });
 windChart.addEventListener("mouseleave", () => { windChartState.hover = -1; windChartTip.style.display = "none"; drawWindChart(); });
 new ResizeObserver(() => { if (windDock.classList.contains("on")) drawWindChart(); }).observe(windChartWrap);
-
+ 
 function setWindExpanded(on) {
   windDock.classList.toggle("expanded", !!on);
   windExpandBtn.textContent = on ? "Collapse" : "Expand";
@@ -2173,12 +2191,12 @@ updateWindDock = function () {
     setWindExpanded(false);
   }
 };
-
-
-
+ 
+ 
+ 
 /* ── render loop / time ───────────────────────────────────────────── */
 function curT() { return Math.max(0, Math.min(T - 1, Math.round(tPos))); }
-
+ 
 function syncUI() {
   const t = curT();
   hourSlider.max = Math.max(0, T - 1);
@@ -2189,13 +2207,13 @@ function syncUI() {
   });
   timeLabel.textContent = dt + "  •  HE " + (HOUR_OF[t] + 1) + " CT";
 }
-
+ 
 function renderAll(forceOverlay) {
   const doOverlay = forceOverlay || Math.abs(tPos - lastOverlayT) >= 0.25;
   if (doOverlay) lastOverlayT = tPos;
   for (let i = 0; i < layoutCount; i++) panels[i].render(panelModels[i], currentVar, tPos, doOverlay);
 }
-
+ 
 function frame(ts) {
   rafId = null;
   const dt = Math.min(0.1, (ts - lastFrame) / 1000); lastFrame = ts;
@@ -2214,7 +2232,7 @@ function refresh() {
   syncUI(); renderAll(true); ensureLoop(); hideProbe();
   if (windDock.classList.contains("on")) drawWindChart();
 }
-
+ 
 /* ── UI wiring ────────────────────────────────────────────────────── */
 VARS.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = META[v].label; varSelect.appendChild(o); });
 modelSelects.forEach((sel, idx) => {
@@ -2226,7 +2244,7 @@ modelSelects.forEach((sel, idx) => {
     panelModels[idx] = chosen; refresh();
   };
 });
-
+ 
 function resizeAll() { let changed = false; for (let i = 0; i < layoutCount; i++) if (panels[i].resize()) changed = true; return changed; }
 const PRESET_3 = (function () {
   const out = [];
@@ -2237,7 +2255,7 @@ const PRESET_3 = (function () {
   MODELS.forEach(m => { if (out.length < 3 && !out.includes(m)) out.push(m); });
   return out;
 })();
-
+ 
 function applyLayout(n) {
   const prevCount = layoutCount;
   layoutCount = n; mapsEl.className = "layout-" + n;
@@ -2256,10 +2274,15 @@ function applyLayout(n) {
   modelSelects.forEach((sel, i) => { sel.value = panelModels[i]; sel.disabled = (n === 4); });
   resizeAll(); refresh();
 }
-
+ 
 varSelect.onchange = e => {
   currentVar = e.target.value;
   chkWindFarms.disabled = currentVar !== "wind_speed_80m";
+  /* Solar Farms toggle is always clickable. Default ON when Solar Radiation is selected. */
+  if (currentVar === "shortwave_radiation") {
+    chkSolarFarms.checked = true;
+    opts.solarFarms = true;
+  }
   drawLegend(); refresh();
 };
 layoutSelect.onchange = e => applyLayout(+e.target.value);
@@ -2267,7 +2290,7 @@ hourSlider.oninput = e => { tPos = +e.target.value; refresh(); };
 speedSelect.onchange = e => { hoursPerSec = +e.target.value; };
 outsideSelect.onchange = e => { opts.outside = e.target.value; renderAll(true); };
 opacityRange.oninput = e => { opts.opacity = +e.target.value / 100; renderAll(false); };
-[["chkFlow","flow"],["chkIso","iso"],["chkIsot","isot"],["chkCities","cities"],["chkHL","hl"],["chkWindFarms","windFarms"]].forEach(([id, k]) => {
+[["chkFlow","flow"],["chkIso","iso"],["chkIsot","isot"],["chkCities","cities"],["chkHL","hl"],["chkWindFarms","windFarms"],["chkSolarFarms","solarFarms"]].forEach(([id, k]) => {
   $(id).onchange = e => {
     opts[k] = e.target.checked;
     if (k === "flow" && !opts.flow) panels.forEach(p => { p.flowReady = false; p.clearFlow(); });
@@ -2293,7 +2316,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "ArrowRight") { tPos = Math.min(T - 1, curT() + 1); refresh(); }
   else if (e.key === "ArrowLeft") { tPos = Math.max(0, curT() - 1); refresh(); }
 });
-
+ 
 /* ── probe ────────────────────────────────────────────────────────── */
 function hideProbe() { probeEl.style.display = "none"; }
 function showProbe(pi, e) {
@@ -2324,11 +2347,11 @@ function showProbe(pi, e) {
 }
 panels.forEach((p, i) => p.box.addEventListener("click", e => showProbe(i, e)));
 document.addEventListener("click", e => { if (!e.target.closest || !e.target.closest(".panel")) hideProbe(); }, true);
-
+ 
 /* ── boot ─────────────────────────────────────────────────────────── */
 $("subtitle").textContent = DATA.npoints + " grid points • " + MODELS.length + " models • rendered live on your GPU";
 $("lastUpdated").textContent = "Last updated: " + DATA.generated_at + " CT";
-
+ 
 (function pickStart() {   /* start at the current hour (Central Time) if it is in range */
   let t = -1;
   try {
@@ -2356,13 +2379,17 @@ hourSlider.value = curT();
 varSelect.value = currentVar; layoutSelect.value = "3";
 chkWindFarms.checked = true;
 chkWindFarms.disabled = currentVar !== "wind_speed_80m";
-
+/* Solar Farms: always clickable; default ON only when Solar Radiation is the active variable */
+chkSolarFarms.disabled = false;
+chkSolarFarms.checked = (currentVar === "shortwave_radiation");
+opts.solarFarms = chkSolarFarms.checked;
+ 
 /* make the controls and the state agree from the very first render */
 outsideSelect.value = "dim";
 opacityRange.value = 100;
 opts.outside = outsideSelect.value;
 opts.opacity = +opacityRange.value / 100;
-
+ 
 new ResizeObserver(() => { if (resizeAll()) renderAll(true); drawLegend(); }).observe(mapsEl);
 applyLayout(3); drawLegend();
 updateWindDock();
@@ -2374,9 +2401,7 @@ window.__viewer = { panels: panels, opts: opts, setT: t => { tPos = t; refresh()
 </html>
 """
 
-
 # ── main ──────────────────────────────────────────────────────────────────
-
 def main():
     t0 = time.time()
     out_dir = Path(OUTPUT_DIR)
@@ -2410,6 +2435,19 @@ def main():
 
     wind_forecast = build_wind_forecast_payload(arrs, lats, lons, timestamps, MODELS)
 
+    print("Solar Farms: loading TX PV fleet (USPVDB)...")
+    try:
+        solar_fleet = demo_solar_fleet() if DEMO_MODE else fetch_tx_solar_fleet(
+            force=WIND_FLEET_FORCE_REFRESH
+        )
+        solar_fleet = filter_fleet_ercot(solar_fleet)
+        solar_farm_points = _wind_farm_points(solar_fleet)
+        solar_total_cap = sum(f.get("capacity_mw", 0.0) for f in solar_farm_points)
+        print(f"  solar fleet: {len(solar_farm_points)} farms, {solar_total_cap:,.0f} MW AC capacity")
+    except Exception as e:
+        print(f"  [warn] could not load solar fleet ({e}); solar farm markers will be empty")
+        solar_farm_points = []
+
     var_meta = {}
     for v in LAYERS:
         label, unit, decimals, stops, _q, pw = VAR_META[v]
@@ -2435,6 +2473,7 @@ def main():
         "base": base,
         "hl": {"count": HL_COUNT, "minSep": HL_MIN_SEP_DEG},
         "windForecast": wind_forecast,
+        "solarFarms": solar_farm_points,
     }
     html = HTML_TEMPLATE.replace("__DATA_JSON__", json.dumps(payload, separators=(",", ":")))
     (out_dir / "index.html").write_text(html, encoding="utf-8")
