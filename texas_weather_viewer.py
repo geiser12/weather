@@ -2277,13 +2277,19 @@ function applyLayout(n) {
  
 varSelect.onchange = e => {
   currentVar = e.target.value;
-  chkWindFarms.disabled = currentVar !== "wind_speed_80m";
+
+  /* Wind Farms toggle is always clickable. Default ON when Wind Speed is selected. */
+  chkWindFarms.checked = currentVar === "wind_speed_80m";
+  opts.windFarms = chkWindFarms.checked;
+
   /* Solar Farms toggle is always clickable. Default ON when Solar Radiation is selected. */
   if (currentVar === "shortwave_radiation") {
     chkSolarFarms.checked = true;
     opts.solarFarms = true;
   }
-  drawLegend(); refresh();
+
+  drawLegend();
+  refresh();
 };
 layoutSelect.onchange = e => applyLayout(+e.target.value);
 hourSlider.oninput = e => { tPos = +e.target.value; refresh(); };
