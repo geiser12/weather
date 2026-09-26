@@ -1879,7 +1879,7 @@ class Panel {
        The source is the same USWTDB fleet used for the MW conversion.
        Farms live under DATA.windForecast.windFarms (not top-level DATA.windFarms). */
     const farms = (DATA.windForecast && DATA.windForecast.windFarms) || [];
-    if (opts.windFarms && v === "wind_speed_80m" && farms.length) {
+    if (opts.windFarms && farms.length) {
       ctx.save();
       ctx.fillStyle = "rgba(100,105,110,0.95)";   /* light grey */
       ctx.strokeStyle = "rgba(40,120,220,0.95)";  /* thin blue outline */
@@ -2275,12 +2275,18 @@ function applyLayout(n) {
   resizeAll(); refresh();
 }
  
+var previousVar = currentVar;
 varSelect.onchange = e => {
   currentVar = e.target.value;
 
-  /* Wind Farms toggle is always clickable. Default ON when Wind Speed is selected. */
-  chkWindFarms.checked = currentVar === "wind_speed_80m";
-  opts.windFarms = chkWindFarms.checked;
+  /* Wind Farms toggle is always clickable. When entering Wind Speed,
+     default it ON; otherwise preserve the user's current choice. */
+  if (currentVar === "wind_speed_80m" && previousVar !== "wind_speed_80m") {
+    chkWindFarms.checked = true;
+    opts.windFarms = true;
+  }
+  chkWindFarms.disabled = false;
+  previousVar = currentVar;
 
   /* Solar Farms toggle is always clickable. Default ON when Solar Radiation is selected. */
   if (currentVar === "shortwave_radiation") {
@@ -2384,7 +2390,7 @@ hourSlider.value = curT();
 })();
 varSelect.value = currentVar; layoutSelect.value = "3";
 chkWindFarms.checked = true;
-chkWindFarms.disabled = currentVar !== "wind_speed_80m";
+chkWindFarms.disabled = false;
 /* Solar Farms: always clickable; default ON only when Solar Radiation is the active variable */
 chkSolarFarms.disabled = false;
 chkSolarFarms.checked = (currentVar === "shortwave_radiation");
