@@ -90,7 +90,7 @@ ERCOT_EXCLUDE_COUNTIES = {
 TEXAS_BOUNDS = {"min_lat": 25.7, "max_lat": 36.6, "min_lon": -106.7, "max_lon": -93.4}
 TIMEZONE = "America/Chicago"
 
-MODELS = ["ecmwf_ifs", "gfs_hrrr", "ncep_nam_conus", "gfs_global"]
+MODELS = ["ecmwf_ifs", "gfs_hrrr", "ncep_rrfs_conus", "gfs_global"]
 MODEL_LABELS = {
     "ecmwf_ifs": "ECMWF",
     "gfs_hrrr": "HRRR",
