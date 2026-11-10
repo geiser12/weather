@@ -94,7 +94,7 @@ MODELS = ["ecmwf_ifs", "gfs_hrrr", "ncep_nam_conus", "gfs_global"]
 MODEL_LABELS = {
     "ecmwf_ifs": "ECMWF",
     "gfs_hrrr": "HRRR",
-    "ncep_nam_conus": "NAM",
+    "ncep_rrfs_conus": "RRFS",
     "gfs_global": "GFS",
 }
 
